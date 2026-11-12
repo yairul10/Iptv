@@ -121,6 +121,8 @@ public final class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(true); s.setLoadWithOverviewMode(true); s.setUseWideViewPort(true);
         s.setAllowFileAccess(false); s.setAllowContentAccess(false); s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         web.setWebViewClient(new WebViewClient() {
+            private boolean failed;
+            @Override public void onPageStarted(WebView view,String page,android.graphics.Bitmap icon) { failed = false; progress.setVisibility(View.VISIBLE); status.setText("Cargando Canal 9…"); }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
                 Uri uri = request.getUrl(); String host = uri.getHost();
@@ -128,9 +130,9 @@ public final class MainActivity extends Activity {
                 if ("https".equalsIgnoreCase(uri.getScheme())) openBrowser(uri.toString());
                 return true;
             }
-            @Override public void onPageFinished(WebView view,String page) { status.setText("Canal 9 · Pulsa Play si no comienza. Atrás para volver."); }
+            @Override public void onPageFinished(WebView view,String page) { if (!failed) status.setText("Canal 9 · Pulsa Play o el botón OK. Atrás para volver."); }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error) {
-                if(request.isForMainFrame()) { progress.setVisibility(View.GONE); status.setText("No se pudo cargar. Comprueba internet y pulsa Recargar o Página oficial."); }
+                if(request.isForMainFrame()) { failed = true; progress.setVisibility(View.GONE); status.setText("No se pudo cargar. Comprueba internet y pulsa Recargar o Página oficial."); }
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -179,6 +181,13 @@ public final class MainActivity extends Activity {
             web.destroy(); web = null;
         }
         setImmersive(false);
+    }
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(web != null && web.hasFocus() && (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER || event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+            if(event.getAction() == KeyEvent.ACTION_UP) togglePlayback();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
     @Override public boolean onKeyDown(int key,KeyEvent event) {
         if(web != null && key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { togglePlayback(); return true; }
