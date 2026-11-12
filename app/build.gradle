@@ -1,0 +1,25 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'cl.mitv.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'cl.mitv.app'
+        minSdk 23
+        targetSdk 35
+        versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
+        versionName '0.1.0'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    if (System.getenv('SIGNING_STORE_FILE')) {
+        signingConfigs {
+            personal {
+                storeFile file(System.getenv('SIGNING_STORE_FILE'))
+                storePassword System.getenv('SIGNING_STORE_PASSWORD')
+                keyAlias System.getenv('SIGNING_KEY_ALIAS')
+                keyPassword System.getenv('SIGNING_KEY_PASSWORD')
+            }
+        }
+        buildTypes { release { signingConfig signingConfigs.personal } }
+    }
+    buildTypes { debug { applicationIdSuffix '.preview'; versionNameSuffix '-prueba' } }
+}
