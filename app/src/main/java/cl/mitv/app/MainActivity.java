@@ -140,7 +140,7 @@ public final class MainActivity extends Activity {
             @Override public void onShowCustomView(View view,CustomViewCallback callback) {
                 if(customView != null) { callback.onCustomViewHidden(); return; }
                 customView = view; customCallback = callback;
-                playerLayout.setVisibility(View.GONE); root.addView(view,new FrameLayout.LayoutParams(-1,-1)); setImmersive(true);
+                playerLayout.setVisibility(View.GONE); root.addView(view,new FrameLayout.LayoutParams(-1,-1)); setFullscreenUi(true);
             }
             @Override public void onHideCustomView() { hideCustomView(); }
         });
@@ -157,9 +157,9 @@ public final class MainActivity extends Activity {
         if(web == null) return;
         boolean visible = playerLayout.getChildAt(0).getVisibility() == View.VISIBLE;
         playerLayout.getChildAt(0).setVisibility(visible ? View.GONE : View.VISIBLE);
-        status.setVisibility(visible ? View.GONE : View.VISIBLE); setImmersive(visible); web.requestFocus();
+        status.setVisibility(visible ? View.GONE : View.VISIBLE); setFullscreenUi(visible); web.requestFocus();
     }
-    private void setImmersive(boolean enabled) {
+    private void setFullscreenUi(boolean enabled) {
         getWindow().getDecorView().setSystemUiVisibility(enabled ? View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
     }
     private void hideCustomView() {
@@ -167,7 +167,7 @@ public final class MainActivity extends Activity {
         root.removeView(customView); customView = null;
         if(playerLayout != null) playerLayout.setVisibility(View.VISIBLE);
         WebChromeClient.CustomViewCallback cb = customCallback; customCallback = null;
-        if(cb != null) cb.onCustomViewHidden(); setImmersive(false);
+        if(cb != null) cb.onCustomViewHidden(); setFullscreenUi(false);
     }
     private void openBrowser(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }
@@ -180,7 +180,7 @@ public final class MainActivity extends Activity {
             if(web.getParent() instanceof ViewGroup) ((ViewGroup)web.getParent()).removeView(web);
             web.destroy(); web = null;
         }
-        setImmersive(false);
+        setFullscreenUi(false);
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if(web != null && web.hasFocus() && (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER || event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
