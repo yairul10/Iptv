@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-version = '0.6.5'
+version = '0.6.6'
 number = int(os.environ['GITHUB_RUN_NUMBER'])
 tag = f'v{version}-build.{number}'
 url = f'https://github.com/yairul10/Iptv/releases/download/{tag}/Mi-TV.apk'

@@ -66,7 +66,6 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private WebView web;
     private LinearLayout playerLayout;
-    private LinearLayout channelBar;
     private View customView;
     private WebChromeClient.CustomViewCallback customCallback;
     private TextView status;
@@ -349,7 +348,6 @@ public final class MainActivity extends Activity {
         addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } }));
         addControl(controls,button("Resultado",() -> markResult(channel,true)));
         addControl(controls,button("Página oficial",() -> openBrowser(channel.siteUrl)));
-        if(!channel.movie) addChannelBar();
         final TextView playerStatus = text("Cargando " + channelLabel(channel) + "…",13,Color.LTGRAY);
         status = playerStatus; status.setPadding(dp(12),0,dp(12),dp(4)); playerLayout.addView(status);
         final ProgressBar playerProgress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
@@ -426,7 +424,7 @@ public final class MainActivity extends Activity {
             @Override public void onShowCustomView(View view,CustomViewCallback callback) {
                 if(customView != null) { callback.onCustomViewHidden(); return; }
                 customView = view; customCallback = callback;
-                playerLayout.setVisibility(View.GONE); root.addView(view,new FrameLayout.LayoutParams(-1,-1)); if(channelBar!=null) channelBar.bringToFront(); setFullscreenUi(true);
+                playerLayout.setVisibility(View.GONE); root.addView(view,new FrameLayout.LayoutParams(-1,-1)); setFullscreenUi(true);
             }
             @Override public void onHideCustomView() { hideCustomView(); }
         });
@@ -436,18 +434,6 @@ public final class MainActivity extends Activity {
         int number=ChannelNavigation.number(channels,item);
         return number>0 ? number+" · "+item.name : item.name;
     }
-    private void addChannelBar() {
-        channelBar=new LinearLayout(this); channelBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        channelBar.setBackgroundColor(BG); channelBar.setPadding(dp(4),0,dp(4),0);
-        Button previous=button("CH −",() -> switchChannel(-1)); previous.setContentDescription("Canal anterior"); previous.setTag("channelPrevious");
-        Button next=button("CH +",() -> switchChannel(1)); next.setContentDescription("Canal siguiente"); next.setTag("channelNext");
-        channelBar.addView(previous,new LinearLayout.LayoutParams(dp(80),-1));
-        TextView label=text(channelLabel(currentChannel),14,Color.WHITE); label.setMaxLines(2); label.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        channelBar.addView(label,new LinearLayout.LayoutParams(0,-2,1));
-        channelBar.addView(next,new LinearLayout.LayoutParams(dp(80),-1));
-        FrameLayout.LayoutParams place=new FrameLayout.LayoutParams(-1,dp(56),android.view.Gravity.BOTTOM);
-        root.addView(channelBar,place); playerLayout.setPadding(0,0,0,dp(56));
-    }
     private void switchChannel(int direction) {
         CatalogItem next=ChannelNavigation.adjacent(channels,currentChannel,direction,selectedCategory,favoritesOnly,searchQuery);
         if(next==null) { Toast.makeText(this,"No hay otros canales en este filtro.",Toast.LENGTH_SHORT).show(); return; }
@@ -455,7 +441,7 @@ public final class MainActivity extends Activity {
         boolean expanded=customView!=null || playerLayout.getChildAt(0).getVisibility()==View.GONE;
         rememberHome(next); showPlayer(next);
         if(expanded) toggleFullscreen();
-        View focus=root.findViewWithTag(direction<0?"channelPrevious":"channelNext"); if(focus!=null) focus.requestFocus();
+        if(nativePlayer!=null) { View focus=root.findViewById(direction<0?androidx.media3.ui.R.id.exo_prev:androidx.media3.ui.R.id.exo_next); if(focus!=null) focus.requestFocus(); }
     }
     private void addControl(LinearLayout row,Button b) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2,-2); p.setMargins(dp(3),0,dp(3),0); row.addView(b,p);
@@ -488,7 +474,6 @@ public final class MainActivity extends Activity {
     }
     private void stopPlayer() {
         hideCustomView();
-        if(channelBar!=null) { root.removeView(channelBar); channelBar=null; }
         if(nativePlayer!=null) { nativePlayer.release(); nativePlayer=null; }
         if(web != null) {
             web.stopLoading(); web.setWebChromeClient(null); web.setWebViewClient(new WebViewClient()); web.loadUrl("about:blank");
