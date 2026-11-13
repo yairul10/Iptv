@@ -1,4 +1,4 @@
-name: Generar APK de Mi TV
+name: Generar APK de Popes TV
 on:
   push:
     branches: [main]
@@ -71,8 +71,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.6.7-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.6.7 (${GITHUB_RUN_NUMBER})" --notes 'En TV Box la barra superior se oculta tras 6 segundos sin usar el control. Atrás o Menú recuperan los botones. Conserva el cambio de canal y el comportamiento del celular.' --latest
+          tag="v0.6.8-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Popes TV 0.6.8 (${GITHUB_RUN_NUMBER})" --notes 'Cambia el nombre visible de la app a Popes TV. Conserva los canales, favoritos y ajustes existentes.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
