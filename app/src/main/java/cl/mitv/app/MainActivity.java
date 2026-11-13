@@ -198,9 +198,6 @@ public final class MainActivity extends Activity {
         addControl(browsing,all); addControl(browsing,favorites);
         LinearLayout.LayoutParams browseParams=new LinearLayout.LayoutParams(-1,-2); browseParams.setMargins(0,dp(16),0,dp(8)); page.addView(browsing,browseParams);
         if(selecting) addButton(page,button("Cancelar selección",() -> { if(!deleting) { selecting=false; selectedIds.clear(); showHome(); } }));
-        if(selecting) { selecting=false; selectedIds.clear(); showHome(); }
-            else PinGate.require(this,() -> { selecting=true; selectedIds.clear(); showHome(); },() -> { });
-        }));
         if(selecting) {
             page.addView(text("Marca los que no usarás y pulsa Eliminar seleccionados.",15,Color.LTGRAY));
             addButton(page,button("Seleccionar todos los visibles",() -> {
