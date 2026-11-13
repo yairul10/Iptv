@@ -71,8 +71,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.6.8-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Popes TV 0.6.8 (${GITHUB_RUN_NUMBER})" --notes 'Cambia el nombre visible de la app a Popes TV. Conserva los canales, favoritos y ajustes existentes.' --latest
+          tag="v0.6.9-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Popes TV 0.6.9 (${GITHUB_RUN_NUMBER})" --notes 'Oculta el menú y la gestión de películas. La app muestra únicamente canales, incluso al restaurar una sesión anterior.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
