@@ -17,7 +17,7 @@ public class RequestHeadersTest {
    server.enqueue(new MockResponse().setBody("ok")); assertEquals("ok",NetworkText.get(first.toString(),1024));
    RecordedRequest original=server.takeRequest(),redirected=server.takeRequest();
    assertEquals("MiTV-Header-Test",original.getHeader("User-Agent")); assertEquals("https://ref.example/",original.getHeader("Referer")); assertNull(redirected.getHeader("Referer"));
-   server.enqueue(new MockResponse().setResponseCode(200)); assertEquals(200,UrlHealthWorker.probe(first.toString())); RecordedRequest health=server.takeRequest();
+   server.enqueue(new MockResponse().setResponseCode(200)); assertEquals(200,UrlHealthWorker.probe(first.toString()).code); RecordedRequest health=server.takeRequest();
    assertEquals("MiTV-Header-Test",health.getHeader("User-Agent")); assertEquals("https://ref.example/",health.getHeader("Referer"));
   } finally { PlaybackSettings.current=previous; }
  }

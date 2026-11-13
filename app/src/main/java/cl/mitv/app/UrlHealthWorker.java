@@ -73,12 +73,13 @@ public final class UrlHealthWorker extends Worker {
  static Probe probe(String address) {
   try {
    URL url = new URL(address);
-   boolean useGet = true;
+   boolean useGet = true, ranged = true;
+   boolean requireManifest = needsManifest(address);
    Set<String> visited = new HashSet<>();
    long deadline = System.currentTimeMillis() + 20000;
    for (int hops = 0; hops <= MAX_REDIRECTS && !Thread.currentThread().isInterrupted() && System.currentTimeMillis() < deadline; hops++) {
     if (!CatalogDocument.validUrl(url.toString())) return new Probe(-1, false);
-    if (!visited.add(url.toString())) return new Probe(-1, false);
+    if (!visited.add((useGet ? "GET" : "HEAD") + ranged + url.toString())) return new Probe(-1, false);
     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
     connection.setConnectTimeout(3500); connection.setReadTimeout(3500);
     connection.setInstanceFollowRedirects(false);
@@ -87,24 +88,25 @@ public final class UrlHealthWorker extends Worker {
     connection.setRequestProperty("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,video/*,*/*");
     connection.setRequestProperty("Accept-Encoding", "identity");
     for (Map.Entry<String, String> header : PlaybackSettings.current.headers(url.toString()).entrySet()) connection.setRequestProperty(header.getKey(), header.getValue());
-    if (useGet) connection.setRequestProperty("Range", "bytes=0-" + (SNIFF_BYTES - 1));
+    if (useGet && ranged) connection.setRequestProperty("Range", "bytes=0-" + (SNIFF_BYTES - 1));
     try {
      int code = connection.getResponseCode();
      if ((code == 405 || code == 501) && useGet) { useGet = false; hops--; continue; }
-     if (code == 416) return new Probe(200, true); // rango no satisfacible: el recurso existe
+     if (code == 416 && useGet && ranged) { ranged = false; hops--; continue; }
      if (code >= 300 && code < 400 && code != 304) {
       String location = connection.getHeaderField("Location");
       if (location == null) return new Probe(code, false);
       url = new URL(url, location); continue;
      }
-     boolean manifest = !needsManifest(url.toString());
-     if (code >= 200 && code < 300) {
+     boolean manifest = !(requireManifest || needsManifest(url.toString()));
+     if (useGet && code >= 200 && code < 300) {
       try (InputStream in = connection.getInputStream()) {
        byte[] buffer = new byte[SNIFF_BYTES];
        int read = 0, step;
        while (read < buffer.length && (step = in.read(buffer, read, buffer.length - read)) > 0) read += step;
        String head = new String(buffer, 0, Math.max(read, 0), java.nio.charset.StandardCharsets.UTF_8).trim();
-       manifest = !needsManifest(url.toString()) || head.startsWith(MANIFEST);
+       if (head.startsWith("\uFEFF")) head = head.substring(1).trim();
+       manifest = !(requireManifest || needsManifest(url.toString())) || head.startsWith(MANIFEST);
       } catch (Exception ignored) { }
      }
      return new Probe(code, manifest);
