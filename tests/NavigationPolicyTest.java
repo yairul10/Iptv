@@ -16,6 +16,10 @@ public final class NavigationPolicyTest {
         };
         for(String url : allowed) if(!NavigationPolicy.isOfficialHttps(url)) throw new AssertionError("Blocked official URL: " + url);
         for(String url : blocked) if(NavigationPolicy.isOfficialHttps(url)) throw new AssertionError("Allowed unexpected URL: " + url);
+        if(!NavigationPolicy.isChannelHttps("https://player.newchannel.example/live", "https://www.newchannel.example/live", "https://www.newchannel.example/")) throw new AssertionError("New channel domain rejected");
+        if(NavigationPolicy.isChannelHttps("https://newchannel.example.evil.test/", "https://www.newchannel.example/live", "https://www.newchannel.example/")) throw new AssertionError("Spoofed channel domain accepted");
+        for(String url : new String[]{"https://127.0.0.1/", "https://localhost/", "file:///test", "http://www.tvn.cl/", "https://192.168.1.1/", "https://test.local/"})
+            if(NavigationPolicy.isPublicHttps(url)) throw new AssertionError("Invalid catalogue URL accepted");
         System.out.println("Navigation policy: " + (allowed.length + blocked.length) + " cases passed");
     }
 }

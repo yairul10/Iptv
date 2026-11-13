@@ -36,13 +36,18 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 
 /** Personal access to channels' official pages and their publicly linked web players. */
 public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(11,18,32), CARD = Color.rgb(23,35,53), MINT = Color.rgb(105,227,197);
-    private static final String[] CATEGORIES = {"Todos", "Regionales", "Nacionales", "Noticias", "Infantil y cultura"};
     private static final String[] RESULTS = {"Pendiente", "Funciona", "No funciona"};
     private final List<Channel> channels = new ArrayList<>();
+    private final ExecutorService network = Executors.newSingleThreadExecutor();
+    private final AppUpdates appUpdates = new AppUpdates();
+    private boolean catalogLoading;
     private SharedPreferences prefs;
     private FrameLayout root;
     private WebView web;
@@ -71,13 +76,16 @@ public final class MainActivity extends Activity {
         try (InputStream in = getAssets().open("channels.json"); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[4096]; int n;
             while((n = in.read(buffer)) != -1) out.write(buffer,0,n);
-            JSONArray items = new JSONArray(out.toString(StandardCharsets.UTF_8.name()));
-            for(int i = 0; i < items.length(); i++) channels.add(new Channel(items.getJSONObject(i)));
+            String bundled = out.toString(StandardCharsets.UTF_8.name());
+            String cached = prefs.getString("catalog_json",null);
+            try { channels.addAll(ChannelCatalog.parse(cached == null ? bundled : cached)); }
+            catch(Exception invalidCache) { channels.addAll(ChannelCatalog.parse(bundled)); prefs.edit().remove("catalog_json").apply(); }
         } catch(Exception e) {
             new AlertDialog.Builder(this).setTitle("No se pudo cargar la lista")
                 .setMessage("Vuelve a instalar Mi TV para recuperar el catálogo.").setPositiveButton("Cerrar",(d,w) -> finish()).show();
         }
         showHome();
+        refreshCatalog(false);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private TextView text(String value, int size, int color) {
@@ -111,7 +119,10 @@ public final class MainActivity extends Activity {
         }));
         HorizontalScrollView filters = new HorizontalScrollView(this);
         LinearLayout filterRow = new LinearLayout(this); filters.addView(filterRow); page.addView(filters);
-        for(String category : CATEGORIES) {
+        LinkedHashSet<String> categories = new LinkedHashSet<>(); categories.add("Todos");
+        for(Channel channel : channels) categories.add(channel.category);
+        if(!categories.contains(selectedCategory)) selectedCategory = "Todos";
+        for(String category : categories) {
             Button filter = button((category.equals(selectedCategory) ? "✓ " : "") + category,() -> {
                 selectedCategory = category; focusedChannelId = ""; homeScrollY = 0; showHome();
             });
@@ -143,13 +154,44 @@ public final class MainActivity extends Activity {
             HorizontalScrollView actionsScroll = new HorizontalScrollView(this); actionsScroll.addView(actions); card.addView(actionsScroll);
         }
         if(count == 0) page.addView(text("No hay canales en este filtro. Prueba otra categoría o vuelve a todos los canales.",18,Color.LTGRAY));
-        page.addView(text("Versión de prueba · 0.2.0",13,Color.GRAY));
+        page.addView(text("Mi TV · 0.3.0",13,Color.GRAY));
+        addButton(page,button("Actualizar canales",() -> refreshCatalog(true)));
+        addButton(page,button("Buscar actualización de la app",() -> appUpdates.check(this,network)));
         addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Mi TV")
-            .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Mi TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
+            .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Mi TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nLa lista se revisa por internet al abrir Mi TV. Actualizar canales permite revisarla de nuevo. Si no hay conexión, se conserva la última lista válida.\n\nBuscar actualización de la app descarga un APK compatible desde GitHub; Android confirma la instalación.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
             .setPositiveButton("Entendido",null).show()));
         if(focusTarget != null) focusTarget.requestFocus();
         final ScrollView scroll = homeScroll;
         scroll.post(() -> scroll.scrollTo(0,homeScrollY));
+    }
+    private void refreshCatalog(boolean manual) {
+        if(catalogLoading) { if(manual) Toast.makeText(this,"La lista se está actualizando…",Toast.LENGTH_SHORT).show(); return; }
+        catalogLoading = true;
+        if(manual) Toast.makeText(this,"Buscando canales…",Toast.LENGTH_SHORT).show();
+        network.execute(() -> {
+            try {
+                String source = NetworkText.get(ChannelCatalog.URL,262144);
+                List<Channel> fresh = ChannelCatalog.parse(source);
+                boolean changed = !source.equals(prefs.getString("catalog_json",""));
+                prefs.edit().putString("catalog_json",source).apply();
+                runOnUiThread(() -> {
+                    catalogLoading = false;
+                    if(isFinishing() || isDestroyed()) return;
+                    channels.clear(); channels.addAll(fresh);
+                    if(web == null && changed) {
+                        if(homeScroll != null) homeScrollY = homeScroll.getScrollY();
+                        // Avoid discarding remote-control focus during an automatic refresh.
+                        showHome();
+                    }
+                    if(manual) Toast.makeText(this,"Lista actualizada: " + fresh.size() + " canales.",Toast.LENGTH_LONG).show();
+                });
+            } catch(Exception e) {
+                runOnUiThread(() -> {
+                    catalogLoading = false;
+                    if(manual && !isFinishing() && !isDestroyed()) Toast.makeText(this,"No se pudo actualizar. Se mantiene la última lista disponible.",Toast.LENGTH_LONG).show();
+                });
+            }
+        });
     }
     private void rememberHome(Channel channel) { focusedChannelId = channel.id; if(homeScroll != null) homeScrollY = homeScroll.getScrollY(); }
     private int resultFor(Channel channel) { return Math.max(0,Math.min(2,prefs.getInt(channel.id + "_result",0))); }
@@ -197,7 +239,7 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 if(!request.isForMainFrame()) return false;
                 String target = request.getUrl().toString();
-                if(NavigationPolicy.isOfficialHttps(target)) return false;
+                if(NavigationPolicy.isChannelHttps(target,channel.playerUrl,channel.siteUrl)) return false;
                 if(request.hasGesture() && "https".equalsIgnoreCase(request.getUrl().getScheme())) openBrowser(target);
                 return true;
             }
@@ -298,5 +340,5 @@ public final class MainActivity extends Activity {
             if(playerSuspended && currentChannel != null) { playerSuspended = false; web.loadUrl(currentChannel.playerUrl); }
         }
     }
-    @Override protected void onDestroy() { stopPlayer(); super.onDestroy(); }
+    @Override protected void onDestroy() { network.shutdownNow(); stopPlayer(); super.onDestroy(); }
 }

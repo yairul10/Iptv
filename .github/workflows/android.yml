@@ -2,6 +2,9 @@ name: Generar APK de Mi TV
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - app/src/main/assets/channels.json
+      - README.md
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,6 +14,8 @@ concurrency:
 jobs:
   apk:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +23,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Validar catálogo y navegación
+      - name: Validar catálogo, navegación y actualizaciones
         run: python3 tools/validate_catalog.py
       - uses: android-actions/setup-android@v3
         with:
@@ -29,51 +34,69 @@ jobs:
           gradle-version: '8.11.1'
       - name: Instalar SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-      # Only a temporary preview key. Configure signing secrets for durable updates.
-      - name: Conservar firma de pruebas mientras exista la caché
+      - name: Recuperar firma anterior
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
           key: mitv-preview-signing-v1
-      - name: Preparar firma personal opcional
+      - name: Restaurar firma fija y comprobar identidad
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          PREVIEW_KEYSTORE_BASE64: ${{ secrets.PREVIEW_KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mitv.jks"
+          mkdir -p "$HOME/.android"
+          if [ -n "$PREVIEW_KEYSTORE_BASE64" ]; then
+            printf '%s' "$PREVIEW_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
           fi
-      - name: Compilar y revisar
+          if [ ! -s "$HOME/.android/debug.keystore" ]; then
+            echo '::error::Falta la firma original. Restaura PREVIEW_KEYSTORE_BASE64. No se generará una clave diferente.'
+            exit 1
+          fi
+          keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -file "$RUNNER_TEMP/signer.der"
+          signer=$(sha256sum "$RUNNER_TEMP/signer.der" | cut -d ' ' -f 1)
+          if [ -f config/signing-sha256.txt ] && [ "$signer" != "$(tr -d '\n\r ' < config/signing-sha256.txt)" ]; then
+            echo '::error::La firma no coincide con la instalación original.'
+            exit 1
+          fi
+          echo "SIGNER_SHA256=$signer" >> "$GITHUB_ENV"
+      - name: Crear respaldo cifrado de firma
+        run: |
+          mkdir -p "$RUNNER_TEMP/signing-recovery"
+          openssl cms -encrypt -binary -aes-256-cbc -in "$HOME/.android/debug.keystore" -out "$RUNNER_TEMP/signing-recovery/signing-backup.p7m" -outform DER config/recovery-certificate.pem
+          printf '%s\n' "$SIGNER_SHA256" > "$RUNNER_TEMP/signing-recovery/signing-sha256.txt"
+      - name: Guardar respaldo cifrado
+        uses: actions/upload-artifact@v4
+        with:
+          name: firma-cifrada
+          path: ${{ runner.temp }}/signing-recovery/
+          retention-days: 30
+      - name: Compilar, probar y revisar
         env:
           BUILD_NUMBER: ${{ github.run_number }}
-          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -f "$RUNNER_TEMP/mitv.jks" ]; then
-            export SIGNING_STORE_FILE="$RUNNER_TEMP/mitv.jks"
-            export SIGNING_STORE_PASSWORD="$STORE_PASSWORD"
-            export SIGNING_KEY_ALIAS="$KEY_ALIAS"
-            export SIGNING_KEY_PASSWORD="$KEY_PASSWORD"
-            gradle --no-daemon lintRelease assembleRelease
-            apk=app/build/outputs/apk/release/app-release.apk
-          else
-            gradle --no-daemon lintDebug assembleDebug
-            apk=app/build/outputs/apk/debug/app-debug.apk
-          fi
+          gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
           mkdir -p entrega
-          cp "$apk" entrega/Mi-TV.apk
+          cp app/build/outputs/apk/debug/app-debug.apk entrega/Mi-TV.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose entrega/Mi-TV.apk
           sha256sum entrega/Mi-TV.apk > entrega/SHA256.txt
+          python3 tools/release_manifest.py
       - name: Descargar APK
         uses: actions/upload-artifact@v4
         with:
           name: Mi-TV-APK
           path: entrega/
           retention-days: 30
+      - name: Publicar actualización descargable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v0.3.0-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.3.0 (${GITHUB_RUN_NUMBER})" --notes 'Lista de canales actualizable por internet y búsqueda de actualizaciones compatibles. Descarga Mi-TV.apk y elige Actualizar, sin desinstalar.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: revision-android
-          path: app/build/reports/lint-results-*.html
+          path: |
+            app/build/reports/lint-results-*.html
+            app/build/reports/tests/
           if-no-files-found: ignore

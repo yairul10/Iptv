@@ -12,21 +12,22 @@ ids = set()
 policy = root / 'app/src/main/java/cl/mitv/app/NavigationPolicy.java'
 # Compile the actual Java navigation policy and test every configured URL against it.
 with tempfile.TemporaryDirectory() as output:
-    subprocess.run(['javac', '-d', output, str(policy), str(root / 'tests/NavigationPolicyTest.java')], check=True)
+    subprocess.run(['javac', '-d', output, str(policy), str(root / 'tests/NavigationPolicyTest.java'), str(root / 'app/src/main/java/cl/mitv/app/UpdatePolicy.java'), str(root / 'tests/UpdatePolicyTest.java')], check=True)
     subprocess.run(['java', '-cp', output, 'cl.mitv.app.NavigationPolicyTest'], check=True)
+    subprocess.run(['java', '-cp', output, 'cl.mitv.app.UpdatePolicyTest'], check=True)
     cases = []
     for channel in items:
         assert re.fullmatch(r'[a-z0-9]+', channel['id']), 'Invalid preference key'
         assert channel['id'] not in ids, 'Duplicate preference key'
         ids.add(channel['id'])
         assert channel['name'] and channel['description']
-        assert channel['category'] in ['Regionales', 'Nacionales', 'Noticias', 'Infantil y cultura']
+        assert isinstance(channel['category'], str) and 0 < len(channel['category'].strip()) <= 40
         assert isinstance(channel['directPlayer'], bool)
         for field in ['playerUrl', 'siteUrl']:
             url = channel[field]
             parsed = urlparse(url)
             assert parsed.scheme == 'https' and parsed.hostname and not parsed.username
-            cases.append('if (!NavigationPolicy.isOfficialHttps(' + json.dumps(url) + ')) throw new AssertionError("Configured URL blocked");')
+            cases.append('if (!NavigationPolicy.isPublicHttps(' + json.dumps(url) + ')) throw new AssertionError("Configured URL blocked");')
     probe = Path(output) / 'CatalogNavigationTest.java'
     probe.write_text('package cl.mitv.app; public class CatalogNavigationTest { public static void main(String[] a) {' + ''.join(cases) + '} }')
     subprocess.run(['javac', '-cp', output, '-d', output, str(probe)], check=True)

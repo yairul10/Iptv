@@ -1,6 +1,5 @@
 package cl.mitv.app;
 
-import android.net.Uri;
 import org.json.JSONObject;
 
 final class Channel {
@@ -15,13 +14,10 @@ final class Channel {
         playerUrl = item.getString("playerUrl");
         siteUrl = item.getString("siteUrl");
         directPlayer = item.getBoolean("directPlayer");
-        requireHttps(playerUrl);
-        requireHttps(siteUrl);
-    }
-
-    private static void requireHttps(String url) {
-        Uri uri = Uri.parse(url);
-        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null)
-            throw new IllegalArgumentException("Expected a public HTTPS page");
+        if(!id.matches("[a-z0-9]{1,40}") || name.trim().isEmpty() || name.length() > 80
+            || category.trim().isEmpty() || category.length() > 40 || description.length() > 240)
+            throw new IllegalArgumentException("Invalid channel fields");
+        if(!NavigationPolicy.isPublicHttps(playerUrl) || !NavigationPolicy.isPublicHttps(siteUrl))
+            throw new IllegalArgumentException("Expected public HTTPS URLs");
     }
 }
