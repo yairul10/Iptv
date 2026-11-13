@@ -29,6 +29,9 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
+import android.text.TextWatcher;
+import android.text.Editable;
 import android.widget.ImageButton;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -74,6 +77,10 @@ public final class MainActivity extends Activity {
     private String focusedAction="play";
     private ScrollView homeScroll;
     private int homeScrollY;
+    private String searchQuery="";
+    private EditText searchInput;
+    private LinearLayout catalogRows;
+    private TextView emptySearch;
     private boolean selecting, deleting;
     private final LinkedHashSet<String> selectedIds=new LinkedHashSet<>();
     private Button deleteSelectedButton;
@@ -86,6 +93,7 @@ public final class MainActivity extends Activity {
             selectedCategory = state.getString("category", "Todos");
             favoritesOnly = state.getBoolean("favorites", false);
             showMovies = state.getBoolean("movies",false);
+            searchQuery = state.getString("searchQuery","");
             focusedChannelId = state.getString("focus", "");
             focusedAction = state.getString("focusAction","play");
             homeScrollY = state.getInt("scroll", 0);
@@ -145,6 +153,8 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,dp(6),0,dp(6)); parent.addView(b,p);
     }
     private void showHome() {
+        boolean restoreSearchFocus=searchInput!=null && searchInput.hasFocus() && currentChannel==null;
+        int searchCursor=restoreSearchFocus?searchInput.getSelectionStart():searchQuery.length();
         stopPlayer(); root.removeAllViews();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         homeScroll = new ScrollView(this); homeScroll.setFillViewport(true);
@@ -153,7 +163,7 @@ public final class MainActivity extends Activity {
         TextView heading = text("Mi TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
         long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
         page.addView(text(total + (showMovies ? " películas" : " canales") + " · Tu televisión, a un toque.",17,Color.LTGRAY));
-        addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { selecting=false; selectedIds.clear(); showMovies=!showMovies; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
+        addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { selecting=false; selectedIds.clear(); showMovies=!showMovies; searchQuery=""; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
         addButton(page,button("Administrar / importar / exportar",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",showMovies))));
         addButton(page,button(favoritesOnly ? "Ver todos los canales" : "Ver favoritos",() -> {
             favoritesOnly = !favoritesOnly; homeScrollY = 0; focusedChannelId = ""; showHome();
@@ -183,6 +193,13 @@ public final class MainActivity extends Activity {
             });
             addControl(filterRow,filter);
         }
+        LinearLayout searchRow=new LinearLayout(this); searchRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        searchInput=new EditText(this); searchInput.setSingleLine(true); searchInput.setTextColor(Color.WHITE); searchInput.setHintTextColor(Color.LTGRAY);
+        searchInput.setHint(showMovies?"Buscar película por nombre":"Buscar canal por nombre"); searchInput.setContentDescription(searchInput.getHint());
+        searchInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT); searchInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        searchInput.setText(searchQuery); searchRow.addView(searchInput,new LinearLayout.LayoutParams(0,dp(56),1));
+        addControl(searchRow,button("Limpiar",() -> { searchInput.setText(""); searchInput.requestFocus(); })); page.addView(searchRow);
+        catalogRows=column(); page.addView(catalogRows);
         int count = 0; View focusTarget = null;
         for(CatalogItem channel : channels) {
             if(channel.movie!=showMovies) continue;
@@ -191,7 +208,7 @@ public final class MainActivity extends Activity {
             count++;
             LinearLayout row=new LinearLayout(this); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12),dp(5),dp(5),dp(5)); row.setMinimumHeight(dp(64)); row.setBackground(background(CARD,Color.TRANSPARENT));
-            LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2); rowParams.setMargins(0,dp(4),0,dp(4)); page.addView(row,rowParams);
+            LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2); rowParams.setMargins(0,dp(4),0,dp(4)); catalogRows.addView(row,rowParams); row.setTag(channel);
             if(selecting) {
                 CheckBox check=new CheckBox(this); check.setText(channelLabel(channel)); check.setTextSize(18); check.setTextColor(Color.WHITE); check.setMinHeight(dp(52)); check.setChecked(selectedIds.contains(channel.id));
                 check.setEnabled(!deleting);
@@ -214,7 +231,13 @@ public final class MainActivity extends Activity {
             if(focusTarget==null) focusTarget=play;
             if(channel.id.equals(focusedChannelId)) focusTarget="favorite".equals(focusedAction)?star:play;
         }
-        if(count == 0) page.addView(text("No hay canales en este filtro. Prueba otra categoría o vuelve a todos los canales.",18,Color.LTGRAY));
+        emptySearch=text("No hay resultados. Prueba otro nombre, limpia la búsqueda o cambia los filtros.",18,Color.LTGRAY); page.addView(emptySearch);
+        filterSearchRows();
+        searchInput.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence value,int start,int count,int after) { }
+            public void onTextChanged(CharSequence value,int start,int before,int count) { searchQuery=value.toString(); filterSearchRows(); }
+            public void afterTextChanged(Editable value) { }
+        });
         page.addView(text("Mi TV · "+BuildConfig.VERSION_NAME,13,Color.GRAY));
         addButton(page,button("Ajustes",() -> startActivity(new Intent(this,SettingsActivity.class))));
         addButton(page,button("Diagnóstico",() -> startActivity(new Intent(this,DiagnosticsActivity.class))));
@@ -224,7 +247,9 @@ public final class MainActivity extends Activity {
         addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Mi TV")
             .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Mi TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nLa lista se revisa por internet al abrir Mi TV. Actualizar canales permite revisarla de nuevo. Si no hay conexión, se conserva la última lista válida.\n\nBuscar actualización de la app descarga un APK compatible desde GitHub; Android confirma la instalación.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
             .setPositiveButton("Entendido",null).show()));
-        if(focusTarget != null) focusTarget.requestFocus();
+        if(restoreSearchFocus) { searchInput.requestFocus(); searchInput.setSelection(Math.max(0,Math.min(searchCursor,searchInput.length()))); }
+        else if(focusTarget!=null && focusTarget.isShown()) focusTarget.requestFocus();
+        else searchInput.requestFocus();
         final ScrollView scroll = homeScroll;
         scroll.post(() -> scroll.scrollTo(0,homeScrollY));
     }
@@ -237,8 +262,16 @@ public final class MainActivity extends Activity {
             if(!isFinishing() && !isDestroyed() && manual) Toast.makeText(this,error==null?message:"No se pudo sincronizar. Se mantiene el catálogo local.",Toast.LENGTH_LONG).show();
         });
     }
+    private void filterSearchRows() {
+        int visible=0;
+        for(int i=0;i<catalogRows.getChildCount();i++) {
+            View row=catalogRows.getChildAt(i); CatalogItem item=(CatalogItem)row.getTag();
+            boolean matches=CatalogSearch.matches(item.name,searchQuery); row.setVisibility(matches?View.VISIBLE:View.GONE); if(matches) visible++;
+        }
+        emptySearch.setVisibility(visible==0?View.VISIBLE:View.GONE);
+    }
     private boolean visibleInList(CatalogItem item) {
-        return item.movie==showMovies && (!favoritesOnly || item.favorite) && ("Todos".equals(selectedCategory) || selectedCategory.equals(item.category));
+        return CatalogSearch.matches(item.name,searchQuery) && item.movie==showMovies && (!favoritesOnly || item.favorite) && ("Todos".equals(selectedCategory) || selectedCategory.equals(item.category));
     }
     private void updateDeleteSelection() {
         if(deleteSelectedButton!=null) { deleteSelectedButton.setText("Eliminar seleccionados ("+selectedIds.size()+")"); deleteSelectedButton.setEnabled(!deleting && !selectedIds.isEmpty()); }
@@ -399,7 +432,7 @@ public final class MainActivity extends Activity {
         root.addView(channelBar,place); playerLayout.setPadding(0,0,0,dp(56));
     }
     private void switchChannel(int direction) {
-        CatalogItem next=ChannelNavigation.adjacent(channels,currentChannel,direction,selectedCategory,favoritesOnly);
+        CatalogItem next=ChannelNavigation.adjacent(channels,currentChannel,direction,selectedCategory,favoritesOnly,searchQuery);
         if(next==null) { Toast.makeText(this,"No hay otros canales en este filtro.",Toast.LENGTH_SHORT).show(); return; }
         if(next.id.equals(currentChannel.id)) { Toast.makeText(this,"Solo hay un canal en este filtro.",Toast.LENGTH_SHORT).show(); return; }
         boolean expanded=customView!=null || playerLayout.getChildAt(0).getVisibility()==View.GONE;
@@ -476,6 +509,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
+        state.putString("searchQuery",searchQuery);
         state.putBoolean("selecting",selecting); state.putStringArrayList("selectedIds",new ArrayList<>(selectedIds));
         state.putBoolean("movies",showMovies); state.putString("category",selectedCategory); state.putBoolean("favorites",favoritesOnly);
         state.putString("focusAction",focusedAction); state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);

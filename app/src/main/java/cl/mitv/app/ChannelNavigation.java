@@ -11,9 +11,12 @@ final class ChannelNavigation {
   return 0;
  }
  static CatalogItem adjacent(List<CatalogItem> catalog,CatalogItem current,int direction,String category,boolean favorites) {
+  return adjacent(catalog,current,direction,category,favorites,"");
+ }
+ static CatalogItem adjacent(List<CatalogItem> catalog,CatalogItem current,int direction,String category,boolean favorites,String query) {
   if(current==null || current.movie) return null;
   List<CatalogItem> eligible=new ArrayList<>();
-  for(CatalogItem item:catalog) if(!item.movie && (!favorites || item.favorite) && ("Todos".equals(category) || category.equals(item.category))) eligible.add(item);
+  for(CatalogItem item:catalog) if(!item.movie && CatalogSearch.matches(item.name,query) && (!favorites || item.favorite) && ("Todos".equals(category) || category.equals(item.category))) eligible.add(item);
   if(eligible.isEmpty()) return null;
   int index=-1;
   for(int i=0;i<eligible.size();i++) if(eligible.get(i).id.equals(current.id)) { index=i; break; }
