@@ -114,7 +114,7 @@ public final class MainActivity extends Activity {
         if(state != null) {
             selectedCategory = state.getString("category", "Todos");
             favoritesOnly = state.getBoolean("favorites", false);
-            showMovies = state.getBoolean("movies",false);
+            showMovies = false; // Movies are hidden in this release.
             searchQuery = state.getString("searchQuery","");
             focusedChannelId = state.getString("focus", "");
             focusedAction = state.getString("focusAction","play");
@@ -175,6 +175,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,dp(6),0,dp(6)); parent.addView(b,p);
     }
     private void showHome() {
+        showMovies = false;
         boolean restoreSearchFocus=searchInput!=null && searchInput.hasFocus() && currentChannel==null;
         int searchCursor=restoreSearchFocus?searchInput.getSelectionStart():searchQuery.length();
         stopPlayer(); root.removeAllViews();
@@ -185,7 +186,6 @@ public final class MainActivity extends Activity {
         TextView heading = text("Popes TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
         long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
         page.addView(text(total + (showMovies ? " películas" : " canales") + " · Tu televisión, a un toque.",17,Color.LTGRAY));
-        addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { selecting=false; selectedIds.clear(); showMovies=!showMovies; searchQuery=""; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
         addButton(page,button("Administrar / importar / exportar",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",showMovies))));
         addButton(page,button(favoritesOnly ? "Ver todos los canales" : "Ver favoritos",() -> {
             favoritesOnly = !favoritesOnly; homeScrollY = 0; focusedChannelId = ""; showHome();
@@ -263,7 +263,6 @@ public final class MainActivity extends Activity {
         page.addView(text("Popes TV · "+BuildConfig.VERSION_NAME,13,Color.GRAY));
         addButton(page,button("Ajustes",() -> startActivity(new Intent(this,SettingsActivity.class))));
         addButton(page,button("Diagnóstico",() -> startActivity(new Intent(this,DiagnosticsActivity.class))));
-        addButton(page,button("Gestionar películas",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",true))));
         addButton(page,button("Actualizar canales",() -> refreshCatalog(true)));
         addButton(page,button("Buscar actualización de la app",() -> appUpdates.check(this,network)));
         addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Popes TV")
