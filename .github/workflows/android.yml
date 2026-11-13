@@ -71,8 +71,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.6.4-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.6.4 (${GITHUB_RUN_NUMBER})" --notes 'Las flechas anterior y siguiente del reproductor nativo ahora cambian de canal. Los controles de retroceso y avance mantienen su función.' --latest
+          tag="v0.6.5-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.6.5 (${GITHUB_RUN_NUMBER})" --notes 'Al borrar el canal que estás viendo se abre el siguiente del filtro actual. Conserva la vista ampliada y solo vuelve a la lista si no quedan otros canales.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4

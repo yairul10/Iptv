@@ -301,12 +301,22 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Cancelar",null).setPositiveButton("Borrar",(dialog,which) -> {
                     if(deleting) return;
                     deleting=true;
-                    repository.submit(() -> repository.store.deleteMany(java.util.Collections.singletonList(channel.id),channel.movie),(count,error) -> {
+                    ArrayList<CatalogItem> before=new ArrayList<>(channels);
+                    boolean expanded=customView!=null || playerLayout.getChildAt(0).getVisibility()==View.GONE;
+                    repository.submit(() -> {
+                        repository.store.deleteMany(java.util.Collections.singletonList(channel.id),channel.movie);
+                        return repository.store.dao.catalog();
+                    },(remaining,error) -> {
                         if(isFinishing() || isDestroyed()) return;
                         deleting=false;
                         if(error==null) {
                             Toast.makeText(this,channel.movie?"Película eliminada.":"Canal eliminado.",Toast.LENGTH_SHORT).show();
-                            if(currentChannel==channel) { homeScrollY=0; showHome(); }
+                            if(currentChannel==channel) {
+                                CatalogItem next=ChannelNavigation.afterDeletion(before,channel,remaining,selectedCategory,favoritesOnly,searchQuery);
+                                channels.clear(); channels.addAll(remaining);
+                                if(next!=null) { rememberHome(next); showPlayer(next); if(expanded) toggleFullscreen(); }
+                                else { homeScrollY=0; showHome(); }
+                            }
                         } else Toast.makeText(this,"No se pudo borrar. Inténtalo de nuevo.",Toast.LENGTH_LONG).show();
                     });
                 }).show();
