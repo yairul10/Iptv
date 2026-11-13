@@ -72,7 +72,34 @@ public final class MainActivity extends Activity {
     private ProgressBar progress;
     private CatalogItem currentChannel;
     private String selectedCategory = "Todos", focusedChannelId = "";
-    private boolean favoritesOnly;
+    private boolean favoritesOnly, recentOnly, pendingOnly;
+    private final LinkedHashSet<String> seenChannelIds=new LinkedHashSet<>();
+    private final LinkedHashSet<String> recentChannelIds=new LinkedHashSet<>();
+    private android.content.SharedPreferences channelTracking;
+    private boolean trackingReady;
+    private void trackChannels(List<CatalogItem> rows) {
+        if(rows==null || (!trackingReady && rows.isEmpty())) return;
+        boolean changed=!trackingReady;
+        for(CatalogItem item:rows) if(!item.movie && seenChannelIds.add(item.id)) {
+            if(trackingReady) recentChannelIds.add(item.id);
+            changed=true;
+        }
+        if(changed) {
+            trackingReady=true;
+            channelTracking.edit().putBoolean("initialized",true)
+                .putStringSet("seen",new LinkedHashSet<>(seenChannelIds))
+                .putStringSet("recent",new LinkedHashSet<>(recentChannelIds)).apply();
+        }
+    }
+    private boolean matchesReviewFilter(CatalogItem item) {
+        return (!pendingOnly || item.testResult==0)
+            && (!recentOnly || (recentChannelIds.contains(item.id) && item.testResult==0));
+    }
+    private List<CatalogItem> reviewFiltered(List<CatalogItem> rows) {
+        List<CatalogItem> filtered=new ArrayList<>();
+        for(CatalogItem item:rows) if(matchesReviewFilter(item)) filtered.add(item);
+        return filtered;
+    }
     private String focusedAction="play";
     private ScrollView homeScroll;
     private int homeScrollY;
@@ -111,9 +138,14 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         repository = CatalogRepository.get(this);
+        channelTracking=getSharedPreferences("channel_review_tracking",MODE_PRIVATE);
+        trackingReady=channelTracking.getBoolean("initialized",false);
+        seenChannelIds.addAll(channelTracking.getStringSet("seen",java.util.Collections.emptySet()));
+        recentChannelIds.addAll(channelTracking.getStringSet("recent",java.util.Collections.emptySet()));
         if(state != null) {
             selectedCategory = state.getString("category", "Todos");
             favoritesOnly = state.getBoolean("favorites", false);
+            recentOnly=state.getBoolean("recent",false); pendingOnly=state.getBoolean("pending",false);
             showMovies = false; // Movies are hidden in this release.
             searchQuery = state.getString("searchQuery","");
             focusedChannelId = state.getString("focus", "");
@@ -126,6 +158,7 @@ public final class MainActivity extends Activity {
         catalogLive = repository.observe();
         catalogObserver = rows -> {
             if(isFinishing() || isDestroyed()) return;
+            trackChannels(rows);
             channels.clear(); if(rows != null) channels.addAll(rows);
             if(ready && web == null && nativePlayer == null) {
                 if(homeScroll != null) homeScrollY = homeScroll.getScrollY();
@@ -192,11 +225,18 @@ public final class MainActivity extends Activity {
         Button menu=button("⚙",this::showHomeOptions); menu.setTextSize(24); menu.setMinWidth(0); menu.setMinimumWidth(0);
         menu.setContentDescription("Opciones y configuración");
         header.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48))); page.addView(header);
-        LinearLayout browsing = new LinearLayout(this);
-        Button all=button(favoritesOnly?"Todos":"✓ Todos",() -> setFavoritesFilter(false));
-        Button favorites=button(favoritesOnly?"✓ Favoritos":"Favoritos",() -> setFavoritesFilter(true));
+        HorizontalScrollView browsingScroll=new HorizontalScrollView(this); browsingScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout browsing = new LinearLayout(this); browsingScroll.addView(browsing);
+        Button all=button(!favoritesOnly&&!recentOnly&&!pendingOnly?"✓ Todos":"Todos",() -> setReviewFilter(0));
+        Button favorites=button(favoritesOnly?"✓ Favoritos":"Favoritos",() -> setReviewFilter(1));
         addControl(browsing,all); addControl(browsing,favorites);
-        LinearLayout.LayoutParams browseParams=new LinearLayout.LayoutParams(-1,-2); browseParams.setMargins(0,dp(16),0,dp(8)); page.addView(browsing,browseParams);
+        int newCount=0,pendingCount=0;
+        for(CatalogItem item:channels) if(!item.movie && item.testResult==0) {
+            pendingCount++; if(recentChannelIds.contains(item.id)) newCount++;
+        }
+        addControl(browsing,button((recentOnly?"✓ ":"")+"Recién agregados ("+newCount+")",() -> setReviewFilter(2)));
+        addControl(browsing,button((pendingOnly?"✓ ":"")+"Sin revisar ("+pendingCount+")",() -> setReviewFilter(3)));
+        LinearLayout.LayoutParams browseParams=new LinearLayout.LayoutParams(-1,-2); browseParams.setMargins(0,dp(16),0,dp(8)); page.addView(browsingScroll,browseParams);
         if(selecting) addButton(page,button("Cancelar selección",() -> { if(!deleting) { selecting=false; selectedIds.clear(); showHome(); } }));
         if(selecting) {
             page.addView(text("Marca los que no usarás y pulsa Eliminar seleccionados.",15,Color.LTGRAY));
@@ -232,7 +272,7 @@ public final class MainActivity extends Activity {
         catalogRows=column(); page.addView(catalogRows);
         int count = 0; View focusTarget = null;
         for(CatalogItem channel : channels) {
-            if(channel.movie!=showMovies) continue;
+            if(channel.movie!=showMovies || !matchesReviewFilter(channel)) continue;
             boolean favorite = channel.favorite;
             if((favoritesOnly && !favorite) || (!selectedCategory.equals("Todos") && !selectedCategory.equals(channel.category))) continue;
             count++;
@@ -261,7 +301,9 @@ public final class MainActivity extends Activity {
             if(focusTarget==null) focusTarget=play;
             if(channel.id.equals(focusedChannelId)) focusTarget="favorite".equals(focusedAction)?star:play;
         }
-        emptySearch=text("No hay resultados. Prueba otro nombre, limpia la búsqueda o cambia los filtros.",18,Color.LTGRAY); page.addView(emptySearch);
+        emptySearch=text(recentOnly?"No hay canales nuevos pendientes. Los que agregues desde esta actualización aparecerán aquí hasta marcarlos en Resultado."
+            :pendingOnly?"No hay canales pendientes en este filtro. Usa Resultado para marcar Funciona o No funciona."
+            :"No hay resultados. Prueba otro nombre, limpia la búsqueda o cambia los filtros.",18,Color.LTGRAY); page.addView(emptySearch);
         filterSearchRows();
         searchInput.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence value,int start,int count,int after) { }
@@ -274,8 +316,9 @@ public final class MainActivity extends Activity {
         final ScrollView scroll = homeScroll;
         scroll.post(() -> scroll.scrollTo(0,homeScrollY));
     }
-    private void setFavoritesFilter(boolean value) {
-        favoritesOnly=value; homeScrollY=0; focusedChannelId=""; showHome();
+    private void setReviewFilter(int filter) {
+        favoritesOnly=filter==1; recentOnly=filter==2; pendingOnly=filter==3;
+        selectedCategory="Todos"; searchQuery=""; homeScrollY=0; focusedChannelId=""; showHome();
     }
     private void showHomeOptions() {
         String[] options={"Agregar / editar / importar canales","Seleccionar canales para eliminar","Ajustes","Actualizar canales","Buscar actualización de la app","Diagnóstico","Ayuda"};
@@ -317,7 +360,7 @@ public final class MainActivity extends Activity {
         emptySearch.setVisibility(visible==0?View.VISIBLE:View.GONE);
     }
     private boolean visibleInList(CatalogItem item) {
-        return CatalogSearch.matches(item.name,searchQuery) && item.movie==showMovies && (!favoritesOnly || item.favorite) && ("Todos".equals(selectedCategory) || selectedCategory.equals(item.category));
+        return matchesReviewFilter(item) && CatalogSearch.matches(item.name,searchQuery) && item.movie==showMovies && (!favoritesOnly || item.favorite) && ("Todos".equals(selectedCategory) || selectedCategory.equals(item.category));
     }
     private void updateDeleteSelection() {
         if(deleteSelectedButton!=null) { deleteSelectedButton.setText("Eliminar seleccionados ("+selectedIds.size()+")"); deleteSelectedButton.setEnabled(!deleting && !selectedIds.isEmpty()); }
@@ -358,7 +401,7 @@ public final class MainActivity extends Activity {
                         if(error==null) {
                             Toast.makeText(this,channel.movie?"Película eliminada.":"Canal eliminado.",Toast.LENGTH_SHORT).show();
                             if(currentChannel==channel) {
-                                CatalogItem next=ChannelNavigation.afterDeletion(before,channel,remaining,selectedCategory,favoritesOnly,searchQuery);
+                                CatalogItem next=ChannelNavigation.afterDeletion(before,channel,reviewFiltered(remaining),selectedCategory,favoritesOnly,searchQuery);
                                 channels.clear(); channels.addAll(remaining);
                                 if(next!=null) { rememberHome(next); showPlayer(next); if(expanded) toggleFullscreen(); }
                                 else { homeScrollY=0; showHome(); }
@@ -484,7 +527,7 @@ public final class MainActivity extends Activity {
         return number>0 ? number+" · "+item.name : item.name;
     }
     private void switchChannel(int direction) {
-        CatalogItem next=ChannelNavigation.adjacent(channels,currentChannel,direction,selectedCategory,favoritesOnly,searchQuery);
+        CatalogItem next=ChannelNavigation.adjacent(reviewFiltered(channels),currentChannel,direction,selectedCategory,favoritesOnly,searchQuery);
         if(next==null) { Toast.makeText(this,"No hay otros canales en este filtro.",Toast.LENGTH_SHORT).show(); return; }
         if(next.id.equals(currentChannel.id)) { Toast.makeText(this,"Solo hay un canal en este filtro.",Toast.LENGTH_SHORT).show(); return; }
         boolean expanded=customView!=null || playerLayout.getChildAt(0).getVisibility()==View.GONE;
@@ -561,8 +604,8 @@ public final class MainActivity extends Activity {
         if(customView != null) { hideCustomView(); return; }
         if((web != null || nativePlayer != null) && playerLayout.getChildAt(0).getVisibility() == View.GONE) { toggleFullscreen(); return; }
         if(web != null || nativePlayer != null) { showHome(); return; }
-        if(favoritesOnly || !selectedCategory.equals("Todos")) {
-            favoritesOnly = false; selectedCategory = "Todos"; homeScrollY = 0; showHome(); return;
+        if(favoritesOnly || recentOnly || pendingOnly || !selectedCategory.equals("Todos")) {
+            favoritesOnly = false; recentOnly=false; pendingOnly=false; selectedCategory = "Todos"; homeScrollY = 0; showHome(); return;
         }
         super.onBackPressed();
     }
@@ -570,6 +613,7 @@ public final class MainActivity extends Activity {
         super.onSaveInstanceState(state);
         state.putString("searchQuery",searchQuery);
         state.putBoolean("selecting",selecting); state.putStringArrayList("selectedIds",new ArrayList<>(selectedIds));
+        state.putBoolean("recent",recentOnly); state.putBoolean("pending",pendingOnly);
         state.putBoolean("movies",showMovies); state.putString("category",selectedCategory); state.putBoolean("favorites",favoritesOnly);
         state.putString("focusAction",focusedAction); state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
     }
