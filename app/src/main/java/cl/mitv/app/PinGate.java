@@ -5,12 +5,15 @@ import android.text.InputType;
 import android.widget.*;
 final class PinGate {
  static void require(Activity activity,Runnable allowed) {
+  require(activity,allowed,activity::finish);
+ }
+ static void require(Activity activity,Runnable allowed,Runnable canceled) {
   SharedPreferences prefs=SettingsStore.prefs(activity); String hash=prefs.getString("pin_hash","");
   if(hash.isEmpty()) { allowed.run(); return; }
   EditText input=new EditText(activity); input.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD); input.setHint("PIN de administración");
   AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("Acceso protegido").setMessage("Introduce el PIN para abrir administración o ajustes.").setView(input)
-    .setPositiveButton("Entrar",null).setNegativeButton("Cancelar",(d,w) -> activity.finish()).create();
-  dialog.setOnCancelListener(d -> activity.finish());
+    .setPositiveButton("Entrar",null).setNegativeButton("Cancelar",(d,w) -> canceled.run()).create();
+  dialog.setOnCancelListener(d -> canceled.run());
   dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
    long locked=prefs.getLong("pin_locked_until",0)-System.currentTimeMillis();
    if(locked>0) { input.setError("Espera "+((locked+999)/1000)+" segundos."); return; }

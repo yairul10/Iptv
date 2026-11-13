@@ -85,5 +85,15 @@ final class CatalogStore {
  }
  void favorite(CatalogItem item,boolean value) { if(item.movie) dao.favoriteMovie(item.id,value); else dao.favoriteChannel(item.id,value); }
  void result(CatalogItem item,int result) { if(item.movie) dao.resultMovie(item.id,result); else dao.resultChannel(item.id,result); }
+ int deleteMany(Collection<String> ids,boolean movie) {
+  Set<String> unique=new HashSet<>(ids); final int[] count={0};
+  db.runInTransaction(() -> {
+   for(String id:unique) {
+    Entry value=entry(id,movie); if(value==null || value.deleted) continue;
+    if(movie) dao.deleteMovie(id); else dao.deleteChannel(id); count[0]++;
+   }
+  });
+  return count[0];
+ }
  void delete(CatalogItem item) { if(item.movie) dao.deleteMovie(item.id); else dao.deleteChannel(item.id); }
 }

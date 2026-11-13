@@ -87,4 +87,15 @@ public class CatalogStoreTest {
   store.save(another); assertNull(db.catalog().resolver("orphan"));
   assertNotNull(db.catalog().resolver("channel:c9"));
  }
+ @Test public void bulkDeleteKeepsOtherEntriesAndRemoteSyncHonorsTombstones() throws Exception {
+  seed();
+  CatalogDocument.Item other=CatalogDocument.parse(CatalogDocumentTest.LEGACY,false).items.get(0); other.id="keep"; store.save(other);
+  other.movie=true; other.id="c9"; store.save(other);
+  assertEquals(1,store.deleteMany(java.util.Arrays.asList("c9","c9","missing"),false));
+  assertEquals(2,db.catalog().catalog().size()); assertTrue(db.catalog().channel("c9").deleted); assertTrue(db.catalog().channel("c9").localEdited);
+  assertFalse(db.catalog().channel("keep").deleted); assertFalse(db.catalog().movie("c9").deleted);
+  CatalogDocument remote=CatalogDocument.parse(CatalogDocumentTest.LEGACY,false); remote.version=7; store.sync(CatalogStore.DEFAULT_REMOTE,remote);
+  assertTrue(db.catalog().channel("c9").deleted); assertEquals(2,db.catalog().catalog().size());
+  assertEquals(1,store.deleteMany(java.util.Arrays.asList("c9","missing"),true)); assertEquals(1,db.catalog().catalog().size());
+ }
 }

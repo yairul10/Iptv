@@ -20,4 +20,14 @@ public class PinScreensTest {
    }
   } finally { prefs.edit().clear().commit(); }
  }
+ @Test public void cancelingInlinePinKeepsCurrentScreenOpenAndDoesNotAuthorize() {
+  SharedPreferences prefs=SettingsStore.prefs(RuntimeEnvironment.getApplication()); prefs.edit().putString("pin_hash",PinCode.encode("4321")).commit();
+  ActivityController<Activity> screen=Robolectric.buildActivity(Activity.class).create();
+  final boolean[] allowed={false},canceled={false};
+  try {
+   PinGate.require(screen.get(),() -> allowed[0]=true,() -> canceled[0]=true);
+   AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog(); dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
+   assertTrue(canceled[0]); assertFalse(allowed[0]); assertFalse(screen.get().isFinishing());
+  } finally { screen.destroy(); prefs.edit().clear().commit(); }
+ }
 }

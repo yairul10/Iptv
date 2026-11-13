@@ -28,6 +28,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.ImageButton;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -73,6 +74,9 @@ public final class MainActivity extends Activity {
     private String focusedAction="play";
     private ScrollView homeScroll;
     private int homeScrollY;
+    private boolean selecting, deleting;
+    private final LinkedHashSet<String> selectedIds=new LinkedHashSet<>();
+    private Button deleteSelectedButton;
     private boolean playerSuspended;
 
     @Override public void onCreate(Bundle state) {
@@ -86,6 +90,7 @@ public final class MainActivity extends Activity {
             focusedAction = state.getString("focusAction","play");
             homeScrollY = state.getInt("scroll", 0);
         }
+        if(state!=null) { selecting=state.getBoolean("selecting",false); ArrayList<String> saved=state.getStringArrayList("selectedIds"); if(saved!=null) selectedIds.addAll(saved); }
         root = new FrameLayout(this); root.setBackgroundColor(BG); setContentView(root);
         root.addView(text("Preparando catálogo…",20,Color.WHITE));
         catalogLive = repository.observe();
@@ -148,11 +153,25 @@ public final class MainActivity extends Activity {
         TextView heading = text("Mi TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
         long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
         page.addView(text(total + (showMovies ? " películas" : " canales") + " · Tu televisión, a un toque.",17,Color.LTGRAY));
-        addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { showMovies=!showMovies; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
+        addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { selecting=false; selectedIds.clear(); showMovies=!showMovies; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
         addButton(page,button("Administrar / importar / exportar",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",showMovies))));
         addButton(page,button(favoritesOnly ? "Ver todos los canales" : "Ver favoritos",() -> {
             favoritesOnly = !favoritesOnly; homeScrollY = 0; focusedChannelId = ""; showHome();
         }));
+        addButton(page,button(selecting ? "Cancelar selección" : "Seleccionar para eliminar",() -> {
+            if(deleting) return;
+            if(selecting) { selecting=false; selectedIds.clear(); showHome(); }
+            else PinGate.require(this,() -> { selecting=true; selectedIds.clear(); showHome(); },() -> { });
+        }));
+        if(selecting) {
+            page.addView(text("Marca los que no usarás y pulsa Eliminar seleccionados.",15,Color.LTGRAY));
+            addButton(page,button("Seleccionar todos los visibles",() -> {
+                for(CatalogItem item:channels) if(visibleInList(item)) selectedIds.add(item.id);
+                homeScrollY=homeScroll.getScrollY(); showHome();
+            }));
+            addButton(page,button("Desmarcar todos",() -> { selectedIds.clear(); homeScrollY=homeScroll.getScrollY(); showHome(); }));
+            deleteSelectedButton=button("",this::confirmDeleteSelected); updateDeleteSelection(); addButton(page,deleteSelectedButton);
+        }
         HorizontalScrollView filters = new HorizontalScrollView(this);
         LinearLayout filterRow = new LinearLayout(this); filters.addView(filterRow); page.addView(filters);
         LinkedHashSet<String> categories = new LinkedHashSet<>(); categories.add("Todos");
@@ -173,6 +192,15 @@ public final class MainActivity extends Activity {
             LinearLayout row=new LinearLayout(this); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12),dp(5),dp(5),dp(5)); row.setMinimumHeight(dp(64)); row.setBackground(background(CARD,Color.TRANSPARENT));
             LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2); rowParams.setMargins(0,dp(4),0,dp(4)); page.addView(row,rowParams);
+            if(selecting) {
+                CheckBox check=new CheckBox(this); check.setText(channelLabel(channel)); check.setTextSize(18); check.setTextColor(Color.WHITE); check.setMinHeight(dp(52)); check.setChecked(selectedIds.contains(channel.id));
+                check.setEnabled(!deleting);
+                check.setOnCheckedChangeListener((b,checked) -> { if(checked) selectedIds.add(channel.id); else selectedIds.remove(channel.id); updateDeleteSelection(); });
+                row.addView(check,new LinearLayout.LayoutParams(-1,-2));
+                if(focusTarget==null || channel.id.equals(focusedChannelId)) focusTarget=check;
+                check.setOnFocusChangeListener((v,hasFocus) -> { if(hasFocus) focusedChannelId=channel.id; });
+                continue;
+            }
             TextView title=text(channelLabel(channel),18,Color.WHITE); title.setTypeface(null,Typeface.BOLD); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             row.addView(title,new LinearLayout.LayoutParams(0,-2,1));
             ImageButton play=catalogIcon(R.drawable.ic_play,"Reproducir "+channel.name,channel,"play",() -> { rememberHome(channel); showPlayer(channel); });
@@ -208,6 +236,28 @@ public final class MainActivity extends Activity {
             catalogLoading=false;
             if(!isFinishing() && !isDestroyed() && manual) Toast.makeText(this,error==null?message:"No se pudo sincronizar. Se mantiene el catálogo local.",Toast.LENGTH_LONG).show();
         });
+    }
+    private boolean visibleInList(CatalogItem item) {
+        return item.movie==showMovies && (!favoritesOnly || item.favorite) && ("Todos".equals(selectedCategory) || selectedCategory.equals(item.category));
+    }
+    private void updateDeleteSelection() {
+        if(deleteSelectedButton!=null) { deleteSelectedButton.setText("Eliminar seleccionados ("+selectedIds.size()+")"); deleteSelectedButton.setEnabled(!deleting && !selectedIds.isEmpty()); }
+    }
+    private void confirmDeleteSelected() {
+        if(deleting || selectedIds.isEmpty()) return;
+        ArrayList<String> ids=new ArrayList<>(selectedIds); boolean movies=showMovies;
+        new AlertDialog.Builder(this).setTitle("Eliminar "+ids.size()+(movies?" películas":" canales")+" seleccionados")
+            .setMessage("Se quitarán de tu lista. Los demás se conservarán y la sincronización no volverá a añadir los eliminados.")
+            .setNegativeButton("Cancelar",null).setPositiveButton("Eliminar",(dialog,which) -> {
+                deleting=true; updateDeleteSelection();
+                repository.submit(() -> repository.store.deleteMany(ids,movies),(count,error) -> {
+                    if(isFinishing() || isDestroyed()) return;
+                    deleting=false;
+                    if(error==null) { selectedIds.clear(); selecting=false; homeScrollY=0; Toast.makeText(this,"Eliminados: "+count,Toast.LENGTH_SHORT).show(); }
+                    else Toast.makeText(this,"No se pudo eliminar. Tus datos se conservaron.",Toast.LENGTH_LONG).show();
+                    showHome();
+                });
+            }).show();
     }
     private void rememberHome(CatalogItem channel) { focusedChannelId=channel.id; if(homeScroll!=null) homeScrollY=homeScroll.getScrollY(); }
     private int resultFor(CatalogItem channel) { return Math.max(0,Math.min(2,channel.testResult)); }
@@ -394,6 +444,7 @@ public final class MainActivity extends Activity {
         return super.onKeyDown(key,event);
     }
     @Override public void onBackPressed() {
+        if(selecting && currentChannel==null) { if(!deleting) { selecting=false; selectedIds.clear(); showHome(); } return; }
         if(customView != null) { hideCustomView(); return; }
         if((web != null || nativePlayer != null) && playerLayout.getChildAt(0).getVisibility() == View.GONE) { toggleFullscreen(); return; }
         if(web != null || nativePlayer != null) { showHome(); return; }
@@ -404,6 +455,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
+        state.putBoolean("selecting",selecting); state.putStringArrayList("selectedIds",new ArrayList<>(selectedIds));
         state.putBoolean("movies",showMovies); state.putString("category",selectedCategory); state.putBoolean("favorites",favoritesOnly);
         state.putString("focusAction",focusedAction); state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
     }
