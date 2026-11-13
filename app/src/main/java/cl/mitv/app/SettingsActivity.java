@@ -15,7 +15,7 @@ public final class SettingsActivity extends Activity {
   SharedPreferences prefs=SettingsStore.prefs(this); PlaybackSettings current=PlaybackSettings.current;
   LinearLayout page=new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setPadding(24,20,24,24); page.setBackgroundColor(Color.rgb(11,18,32));
   ScrollView scroll=new ScrollView(this); scroll.addView(page); setContentView(scroll);
-  TextView title=label(page,"Ajustes de Mi TV"); title.setTextSize(26);
+  TextView title=label(page,"Ajustes de Popes TV"); title.setTextSize(26);
   label(page,"User-Agent (vacío: predeterminado)"); EditText ua=field(page,current.userAgent,false);
   label(page,"Referer por dominio: una línea dominio=https://página/"); EditText referers=field(page,prefs.getString("referers",""),true);
   label(page,"Los dominios más específicos tienen prioridad. En páginas web se aplica a la navegación principal; los subrecursos los controla WebView.");
