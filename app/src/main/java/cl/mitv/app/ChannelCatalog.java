@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Set;
 
 final class ChannelCatalog {
-    static final String URL = "https://raw.githubusercontent.com/yairul10/Iptv/main/app/src/main/assets/channels.json";
     static List<Channel> parse(String source) throws org.json.JSONException {
         JSONArray array = new JSONArray(source);
         if(array.length() < 1 || array.length() > 300) throw new IllegalArgumentException("Invalid catalog size");
