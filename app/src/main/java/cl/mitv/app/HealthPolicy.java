@@ -10,12 +10,12 @@ final class HealthPolicy {
   return code == 401 || code == 403 || code == 429 || code == 451;
  }
 
- private static int bump(int previous) { return previous >= MAX_FAILURES ? MAX_FAILURES : previous + 1; }
+ private static int bump(int previous) { return Math.min(Math.max(0, previous), MAX_FAILURES - 1) + 1; }
 
  static String status(int code, int failures) { return status(code, failures, true); }
 
  static String status(int code, int failures, boolean manifestOk) {
-  int next = bump(failures);
+  int next = Math.max(0, Math.min(failures, MAX_FAILURES));
   if (code >= 200 && code < 400) {
    if (!manifestOk) return next >= DOWN_AFTER_FAILURES ? "DOWN" : "UNKNOWN";
    return "UP";

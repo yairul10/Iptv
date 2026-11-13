@@ -65,6 +65,7 @@ final class CatalogStore {
    value.localEdited=local; value.remoteVersion=version;
    if(item.movie) dao.putMovie((MovieEntity)value); else dao.putChannel((ChannelEntity)value);
   }
+  dao.deleteOrphanResolvers();
   return conflicts;
  }
  String sync(String source,CatalogDocument document) {

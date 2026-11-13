@@ -17,13 +17,7 @@ public abstract class AppDatabase extends RoomDatabase {
  };
  public static final Migration MIGRATION_2_3=new Migration(2,3) {
   @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
-   // Deduplica por URL repuntando canales y películas al superviviente antes de borrar.
-   db.execSQL("CREATE TEMP TABLE IF NOT EXISTS `resolver_dups` AS SELECT r.id AS oldId,(SELECT MIN(r2.id) FROM resolvers r2 WHERE r2.sourceUrl=r.sourceUrl) AS keepId FROM resolvers r WHERE r.id<>(SELECT MIN(r3.id) FROM resolvers r3 WHERE r3.sourceUrl=r.sourceUrl)");
-   db.execSQL("UPDATE channels SET resolverId=(SELECT keepId FROM resolver_dups WHERE oldId=channels.resolverId) WHERE resolverId IN (SELECT oldId FROM resolver_dups)");
-   db.execSQL("UPDATE movies SET resolverId=(SELECT keepId FROM resolver_dups WHERE oldId=movies.resolverId) WHERE resolverId IN (SELECT oldId FROM resolver_dups)");
-   db.execSQL("DELETE FROM resolvers WHERE id IN (SELECT oldId FROM resolver_dups)");
-   db.execSQL("DROP TABLE resolver_dups");
-   db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_resolvers_sourceUrl` ON `resolvers` (`sourceUrl`)");
+   db.execSQL("CREATE INDEX IF NOT EXISTS `index_resolvers_sourceUrl` ON `resolvers` (`sourceUrl`)");
   }
  };
  private static volatile AppDatabase instance;

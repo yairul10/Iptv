@@ -71,8 +71,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.5.2-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.5.2 (${GITHUB_RUN_NUMBER})" --notes 'Corrige comprobación de URLs y migración Room 1/2 a 3 sin borrar datos. Instala el APK como actualización sobre la versión anterior.' --latest
+          tag="v0.5.3-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.5.3 (${GITHUB_RUN_NUMBER})" --notes 'Corrige comprobación de URLs y migración Room 1/2 a 3 sin borrar datos. Instala el APK como actualización sobre la versión anterior.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4

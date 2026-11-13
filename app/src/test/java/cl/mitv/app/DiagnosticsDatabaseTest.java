@@ -23,6 +23,7 @@ public class DiagnosticsDatabaseTest {
  @Test public void migrationFromVersion1KeepsExistingCatalogAndUserState() throws Exception {
   verifyMigration(1);
   verifyMigration(2);
+  verifyMigration(3);
  }
  private void verifyMigration(int version) throws Exception {
   Context context=RuntimeEnvironment.getApplication(); String name="diagnostic-migration-test-"+version+".db"; context.deleteDatabase(name);
@@ -39,10 +40,7 @@ public class DiagnosticsDatabaseTest {
   old.setVersion(version); old.close();
   AppDatabase db=Room.databaseBuilder(context,AppDatabase.class,name).addMigrations(AppDatabase.MIGRATION_1_2,AppDatabase.MIGRATION_2_3).allowMainThreadQueries().build();
   try { CatalogItem movie=db.catalog().catalog().get(0); assertTrue(movie.movie); assertTrue(movie.favorite); assertEquals(1,movie.testResult); assertEquals("STREAM",movie.mode); assertEquals("1",db.catalog().metadata("initialized")); assertTrue(db.diagnostics().recent().isEmpty());
-   android.database.Cursor rows=db.query("SELECT COUNT(*) FROM resolvers WHERE sourceUrl='https://example.com/a.mp4'",null); try { assertTrue(rows.moveToFirst()); assertEquals(1,rows.getInt(0)); } finally { rows.close(); }
-   android.database.Cursor kept=db.query("SELECT resolverId FROM movies WHERE id='film'",null); try { assertTrue(kept.moveToFirst()); assertEquals("r",kept.getString(0)); } finally { kept.close(); }
-   android.database.Cursor list=db.query("PRAGMA index_list(`resolvers`)",null); try { boolean unique=false; while(list.moveToNext()) if("index_resolvers_sourceUrl".equals(list.getString(list.getColumnIndex("name")))) unique=list.getInt(list.getColumnIndex("unique"))==1; assertTrue("el índice debe ser único",unique); } finally { list.close(); }
-  }
+   android.database.Cursor rows=db.query("SELECT COUNT(*) FROM resolvers WHERE sourceUrl='https://example.com/a.mp4'",null); try { assertTrue(rows.moveToFirst()); assertEquals(2,rows.getInt(0)); } finally { rows.close(); } }
   finally { db.close(); context.deleteDatabase(name); }
  }
 }

@@ -72,4 +72,19 @@ public class CatalogStoreTest {
   try { store.initialize(() -> "broken",null); fail(); } catch(IllegalStateException expected) { }
   assertNull(db.catalog().metadata("initialized")); assertTrue(db.catalog().catalog().isEmpty()); seed(); assertEquals(1,db.catalog().catalog().size());
  }
+ @Test public void sameUrlEntriesKeepIndependentModesAndHealth() throws Exception {
+  seed(); CatalogDocument.Item another=CatalogDocument.parse(CatalogDocumentTest.LEGACY,false).items.get(0); another.id="another"; store.save(another);
+  assertEquals(2,db.catalog().catalog().size());
+  db.catalog().setHealth("channel:c9",another.url,"UP",123,0,200);
+  db.catalog().setHealth("channel:another",another.url,"DOWN",456,3,500);
+  another.mode="WEB_PAGE"; another.siteUrl="https://example.com/other"; store.save(another);
+  assertEquals("OFFICIAL_PLAYER",db.catalog().resolver("channel:c9").mode);
+  assertEquals("UP",db.catalog().resolver("channel:c9").health);
+  assertEquals("WEB_PAGE",db.catalog().resolver("channel:another").mode);
+  assertEquals("UNKNOWN",db.catalog().resolver("channel:another").health);
+  assertEquals(0,db.catalog().resolver("channel:another").checkedAt);
+  ResolverEntity orphan=new ResolverEntity(); orphan.id="orphan"; orphan.sourceUrl=another.url; db.catalog().putResolver(orphan);
+  store.save(another); assertNull(db.catalog().resolver("orphan"));
+  assertNotNull(db.catalog().resolver("channel:c9"));
+ }
 }
