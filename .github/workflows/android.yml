@@ -43,7 +43,7 @@ jobs:
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          gradle --no-daemon testReleaseUnitTest lintRelease assembleRelease
+          gradle --no-daemon --continue testReleaseUnitTest lintRelease assembleRelease
           if [ "$KEYSTORE_AVAILABLE" != "true" ]; then
             echo "Pruebas completas. Falta guardar MITV_SIGNING_BUNDLE para publicar el APK instalable." >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -54,12 +54,13 @@ jobs:
           sha256sum entrega/Mi-TV.apk > entrega/SHA256.txt
           python3 tools/release_manifest.py
       - name: Exportar esquema Room
+        if: always()
         run: |
           python3 - <<'PYSCHEMA'
           import base64
           from pathlib import Path
           schema=Path('app/schemas/cl.mitv.app.data.AppDatabase/1.json')
-          print('ROOM_SCHEMA_BASE64='+base64.b64encode(schema.read_bytes()).decode())
+          if schema.exists(): print('ROOM_SCHEMA_BASE64='+base64.b64encode(schema.read_bytes()).decode())
           PYSCHEMA
       - name: Descargar APK
         if: env.KEYSTORE_AVAILABLE == 'true'

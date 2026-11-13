@@ -17,6 +17,8 @@ final class CatalogDocument {
  final List<Item> items=new ArrayList<>();
  final List<String> errors=new ArrayList<>();
  int duplicates;
+ int invalidCount;
+ private void recordError(String value) { invalidCount++; if(errors.size()<100) errors.add(value); }
  long version;
  static boolean validUrl(String value) {
   try {
@@ -60,7 +62,7 @@ final class CatalogDocument {
    if(item.id==null||item.id.isEmpty()) item.id="i"+key(item.name+"\n"+item.url);
    if(!item.id.matches("[A-Za-z0-9_.:-]{1,160}")) throw new IllegalArgumentException("identificador no válido");
    items.add(item);
-  } catch(IllegalArgumentException e) { if(errors.size()<100) errors.add(label+": "+e.getMessage()); }
+  } catch(IllegalArgumentException e) { recordError(label+": "+e.getMessage()); }
  }
  private void json(String source,boolean defaultMovie) throws JSONException {
   JSONTokener tokenizer=new JSONTokener(source); Object root=tokenizer.nextValue();
@@ -87,7 +89,7 @@ final class CatalogDocument {
     if(o.has("kind")&&!"movie".equals(o.getString("kind"))&&!"channel".equals(o.getString("kind"))) throw new IllegalArgumentException("tipo no reconocido");
     item.movie=o.has("kind")?"movie".equals(o.getString("kind")):movie;
     item.id=o.optString("id",""); item.name=o.optString("name",o.optString("title",""));
-    item.group=o.optString("group",o.optString("category",groups.getOrDefault(o.optString("groupId"),"Sin grupo")));
+    item.group=o.optString("group",o.optString("category",(groups.containsKey(o.optString("groupId"))?groups.get(o.optString("groupId")):"Sin grupo")));
     item.description=o.optString("description","");
     JSONObject r=o.has("resolverId")?resolvers.get(o.getString("resolverId")):o;
     if(r==null) throw new IllegalArgumentException("resolver no encontrado");
@@ -95,7 +97,7 @@ final class CatalogDocument {
     item.siteUrl=r.optString("siteUrl",item.url);
     item.mode=r.optString("mode",r.has("directPlayer")?(r.optBoolean("directPlayer")?"OFFICIAL_PLAYER":"WEB_PAGE"):"STREAM");
     accept(item,"Entrada "+(i+1));
-   } catch(Exception e) { if(errors.size()<100) errors.add("Entrada "+(i+1)+": "+e.getMessage()); }
+   } catch(Exception e) { recordError("Entrada "+(i+1)+": "+e.getMessage()); }
   }
  }
  private static int commaOutsideQuotes(String line) {
@@ -106,7 +108,7 @@ final class CatalogDocument {
   for(String line:source.split("\\r?\\n")) {
    line=line.trim(); if(line.isEmpty()) continue;
    if(line.startsWith("#EXTINF:")) {
-    if(pending!=null && errors.size()<100) errors.add("Entrada sin URL: "+pending.name);
+    if(pending!=null) recordError("Entrada sin URL: "+pending.name);
     pending=new Item(); pending.movie=movie; int comma=commaOutsideQuotes(line); pending.name=comma<0?"":line.substring(comma+1).trim();
     Matcher m=Pattern.compile("([A-Za-z0-9_-]+)=\"([^\"]*)\"").matcher(comma<0?line:line.substring(0,comma));
     while(m.find()) {
@@ -121,7 +123,7 @@ final class CatalogDocument {
     pending.url=line; accept(pending,"Entrada "+index); pending=null;
    }
   }
-  if(pending!=null&&errors.size()<100) errors.add("Última entrada sin URL.");
+  if(pending!=null) recordError("Última entrada sin URL.");
  }
  static CatalogDocument fromRows(List<cl.mitv.app.data.CatalogItem> rows) {
   CatalogDocument doc=new CatalogDocument();

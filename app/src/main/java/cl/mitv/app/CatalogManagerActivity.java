@@ -124,7 +124,7 @@ public final class CatalogManagerActivity extends Activity {
   run(() -> repo.store.preview(document),(counts,error) -> {
    if(error!=null) { alert("No se pudo preparar el resumen",message(error)); return; }
    int film=0; Set<String> groups=new HashSet<>(); for(CatalogDocument.Item item:document.items) { if(item.movie) film++; groups.add(item.group); }
-   String summary="Canales válidos: "+(document.items.size()-film)+"\nPelículas válidas: "+film+"\nGrupos: "+groups.size()+"\nNuevos: "+counts[0]+"\nExistentes a actualizar: "+counts[1]+"\nDuplicados omitidos: "+document.duplicates+"\nEntradas inválidas omitidas: "+document.errors.size()+
+   String summary="Canales válidos: "+(document.items.size()-film)+"\nPelículas válidas: "+film+"\nGrupos: "+groups.size()+"\nNuevos: "+counts[0]+"\nExistentes a actualizar: "+counts[1]+"\nDuplicados omitidos: "+document.duplicates+"\nEntradas inválidas omitidas: "+document.invalidCount+
      "\n\nSe guardará solo lo válido. Las entradas existentes incluidas se actualizarán como ediciones locales; lo demás no se elimina.";
    if(!document.errors.isEmpty()) summary+="\n\n"+android.text.TextUtils.join("\n",document.errors.subList(0,Math.min(5,document.errors.size())));
    AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Resumen de importación").setMessage(summary)

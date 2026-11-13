@@ -15,10 +15,11 @@ final class CatalogStore {
    if("1".equals(dao.metadata("initialized"))) return;
    try {
     CatalogDocument first=CatalogDocument.parse(seed.read(),false);
+    if(!first.errors.isEmpty()||first.duplicates>0) throw new IllegalArgumentException("El catálogo inicial no es válido.");
     apply(first,false,DEFAULT_REMOTE,0);
     if(legacy!=null) {
      String cached=legacy.getString("catalog_json",null);
-     if(cached!=null) try { apply(CatalogDocument.parse(cached,false),false,DEFAULT_REMOTE,0); } catch(Exception ignored) { /* Keep the valid asset seed. */ }
+     if(cached!=null) try { CatalogDocument old=CatalogDocument.parse(cached,false); if(!old.errors.isEmpty()||old.duplicates>0) throw new IllegalArgumentException("Invalid cache"); apply(old,false,DEFAULT_REMOTE,0); } catch(Exception ignored) { /* Keep the valid asset seed. */ }
      for(ChannelEntity item:dao.allChannels()) {
       item.favorite=legacy.getBoolean(item.id+"_favorite",false);
       item.testResult=Math.max(0,Math.min(2,legacy.getInt(item.id+"_result",0))); dao.putChannel(item);
