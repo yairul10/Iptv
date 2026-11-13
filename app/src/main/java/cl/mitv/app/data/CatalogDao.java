@@ -30,6 +30,10 @@ public interface CatalogDao {
  @Query("UPDATE movies SET deleted=1,localEdited=1 WHERE id=:id") void deleteMovie(String id);
  @Query("UPDATE channels SET enabled=0 WHERE sourceKey=:source AND localEdited=0") void hideRemoteChannels(String source);
  @Query("UPDATE movies SET enabled=0 WHERE sourceKey=:source AND localEdited=0") void hideRemoteMovies(String source);
- @Query("SELECT DISTINCT r.* FROM resolvers r WHERE r.id IN (SELECT resolverId FROM channels WHERE enabled=1 AND deleted=0 UNION SELECT resolverId FROM movies WHERE enabled=1 AND deleted=0) ORDER BY checkedAt LIMIT 50") List<ResolverEntity> healthBatch();
+ /** Los no comprobados y los vivos primero; los caídos al final para no ocupar el cupo. */
+ @Query("SELECT DISTINCT r.* FROM resolvers r WHERE r.id IN (SELECT resolverId FROM channels WHERE enabled=1 AND deleted=0 UNION SELECT resolverId FROM movies WHERE enabled=1 AND deleted=0) ORDER BY (r.health='DOWN'), r.checkedAt LIMIT 50") List<ResolverEntity> healthBatch();
  @Query("UPDATE resolvers SET health=:health,checkedAt=:time,failures=:failures,httpCode=:code WHERE id=:id AND sourceUrl=:url") void setHealth(String id,String url,String health,long time,int failures,int code);
+ /** Al cambiar la URL de un resolver, descarta el historial de salud anterior. */
+ @Query("UPDATE resolvers SET health='',checkedAt=0,failures=0,httpCode=0 WHERE id=:id") void resetHealth(String id);
+ @Query("DELETE FROM resolvers WHERE id NOT IN (SELECT resolverId FROM channels UNION SELECT resolverId FROM movies)") void deleteOrphanResolvers();
 }
