@@ -55,6 +55,8 @@ public final class MainActivity extends Activity {
     private boolean ready, showMovies;
     private ExoPlayer nativePlayer;
     private boolean resumeNative;
+    private final android.os.Handler sleepHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable sleepTask=this::expireSleep;
     private FrameLayout root;
     private WebView web;
     private LinearLayout playerLayout;
@@ -98,7 +100,7 @@ public final class MainActivity extends Activity {
                     .setMessage("No se borraron tus datos. Cierra y vuelve a abrir Mi TV para reintentar.").setPositiveButton("Cerrar",(d,w) -> finish()).show();
                 return;
             }
-            ready = true; showHome(); UrlHealthWorker.schedule(this); refreshCatalog(false);
+            ready = true; showHome(); UrlHealthWorker.schedule(this); refreshCatalog(false); appUpdates.check(this,network,false);
         });
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -130,7 +132,7 @@ public final class MainActivity extends Activity {
         long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
         page.addView(text(total + (showMovies ? " películas" : " canales") + " · Tu televisión, a un toque.",17,Color.LTGRAY));
         addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { showMovies=!showMovies; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
-        addButton(page,button("Administrar / importar / exportar",() -> startActivity(new Intent(this,CatalogManagerActivity.class))));
+        addButton(page,button("Administrar / importar / exportar",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",showMovies))));
         addButton(page,button(favoritesOnly ? "Ver todos los canales" : "Ver favoritos",() -> {
             favoritesOnly = !favoritesOnly; homeScrollY = 0; focusedChannelId = ""; showHome();
         }));
@@ -174,7 +176,10 @@ public final class MainActivity extends Activity {
             HorizontalScrollView actionsScroll = new HorizontalScrollView(this); actionsScroll.addView(actions); card.addView(actionsScroll);
         }
         if(count == 0) page.addView(text("No hay canales en este filtro. Prueba otra categoría o vuelve a todos los canales.",18,Color.LTGRAY));
-        page.addView(text("Mi TV · 0.4.0",13,Color.GRAY));
+        page.addView(text("Mi TV · 0.5.0",13,Color.GRAY));
+        addButton(page,button("Ajustes",() -> startActivity(new Intent(this,SettingsActivity.class))));
+        addButton(page,button("Diagnóstico",() -> startActivity(new Intent(this,DiagnosticsActivity.class))));
+        addButton(page,button("Gestionar películas",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",true))));
         addButton(page,button("Actualizar canales",() -> refreshCatalog(true)));
         addButton(page,button("Buscar actualización de la app",() -> appUpdates.check(this,network)));
         addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Mi TV")
@@ -206,6 +211,7 @@ public final class MainActivity extends Activity {
     }
     @SuppressWarnings("SetJavaScriptEnabled")
     private void showPlayer(CatalogItem channel) {
+        Diagnostics.record(this,"INFO","reproducción",(channel.movie?"Película":"Canal")+" abierto en modo "+channel.mode+" · "+channel.playerUrl);
         stopPlayer(); currentChannel = channel; playerSuspended = false; root.removeAllViews();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         playerLayout = column(); root.addView(playerLayout,new FrameLayout.LayoutParams(-1,-1));
@@ -215,7 +221,7 @@ public final class MainActivity extends Activity {
         addControl(controls,button("Canales",this::showHome));
         addControl(controls,button("Play / pausa",this::togglePlayback));
         addControl(controls,button("Ampliar vista",this::toggleFullscreen));
-        addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } }));
+        addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } }));
         addControl(controls,button("Resultado",() -> markResult(channel,true)));
         addControl(controls,button("Página oficial",() -> openBrowser(channel.siteUrl)));
         final TextView playerStatus = text("Cargando " + channel.name + "…",13,Color.LTGRAY);
@@ -223,7 +229,14 @@ public final class MainActivity extends Activity {
         final ProgressBar playerProgress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress = playerProgress; playerLayout.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
         if("STREAM".equals(channel.mode)) {
-            nativePlayer=new ExoPlayer.Builder(this).build();
+            PlaybackSettings profile=PlaybackSettings.current;
+            androidx.media3.datasource.DataSource.Factory http=new androidx.media3.datasource.DefaultHttpDataSource.Factory().setUserAgent(profile.userAgent.isEmpty()?"MiTV/0.5.0":profile.userAgent);
+            androidx.media3.datasource.DataSource.Factory headers=new androidx.media3.datasource.ResolvingDataSource.Factory(http,spec -> {
+                java.util.Map<String,String> values=new java.util.HashMap<>(spec.httpRequestHeaders); values.putAll(PlaybackSettings.current.headers(spec.uri.toString())); return spec.withRequestHeaders(values);
+            });
+            androidx.media3.exoplayer.DefaultLoadControl load=new androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(profile.minBufferMs(),profile.maxBufferMs(),profile.startBufferMs(),profile.rebufferMs()).build();
+            nativePlayer=new ExoPlayer.Builder(this).setLoadControl(load).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(headers)).build();
+            if(profile.qualityHeight>0) nativePlayer.setTrackSelectionParameters(nativePlayer.getTrackSelectionParameters().buildUpon().setMaxVideoSize(Integer.MAX_VALUE,profile.qualityHeight).build());
             nativePlayer.setAudioAttributes(new androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(),true);
             PlayerView video=new PlayerView(this); video.setPlayer(nativePlayer);
             playerLayout.addView(video,new LinearLayout.LayoutParams(-1,0,1));
@@ -233,6 +246,7 @@ public final class MainActivity extends Activity {
                     playerStatus.setText(channel.name+" · Controles del reproductor");
                 }
                 @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                    Diagnostics.record(MainActivity.this,"ERROR","reproducción","Error de video directo: "+error.getErrorCodeName());
                     playerProgress.setVisibility(View.GONE); playerStatus.setText("No se pudo reproducir. Revisa la URL y el modo en Editar.");
                 }
             });
@@ -240,7 +254,7 @@ public final class MainActivity extends Activity {
             return;
         }
         web = new WebView(this); web.setBackgroundColor(Color.BLACK);
-        WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
+        WebSettings settings = web.getSettings(); if(!PlaybackSettings.current.userAgent.isEmpty()) settings.setUserAgentString(PlaybackSettings.current.userAgent); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(true); settings.setLoadWithOverviewMode(true); settings.setUseWideViewPort(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         // Official pages often use third-party video providers. Their cookie notices remain intact.
@@ -248,6 +262,7 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             private boolean failed;
             private void fail() {
+                Diagnostics.record(MainActivity.this,"WARN","web","No se pudo cargar la página del reproductor.");
                 failed = true; playerProgress.setVisibility(View.GONE);
                 playerStatus.setText("No se pudo cargar " + channel.name + ". Prueba Recargar o Página oficial.");
             }
@@ -257,7 +272,11 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 if(!request.isForMainFrame()) return false;
                 String target = request.getUrl().toString();
-                if(NavigationPolicy.isChannelUrl(target,channel.playerUrl,channel.siteUrl)) return false;
+                if(NavigationPolicy.isChannelUrl(target,channel.playerUrl,channel.siteUrl)) {
+                    java.util.Map<String,String> headers=PlaybackSettings.current.headers(target);
+                    if(request.hasGesture()&&!headers.isEmpty()) { view.loadUrl(target,headers); return true; }
+                    return false;
+                }
                 if(request.hasGesture() && "https".equalsIgnoreCase(request.getUrl().getScheme())) openBrowser(target);
                 return true;
             }
@@ -278,7 +297,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onHideCustomView() { hideCustomView(); }
         });
-        playerLayout.addView(web,new LinearLayout.LayoutParams(-1,0,1)); web.loadUrl(channel.playerUrl); web.requestFocus();
+        playerLayout.addView(web,new LinearLayout.LayoutParams(-1,0,1)); web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); web.requestFocus();
     }
     private void addControl(LinearLayout row,Button b) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2,-2); p.setMargins(dp(3),0,dp(3),0); row.addView(b,p);
@@ -317,7 +336,7 @@ public final class MainActivity extends Activity {
             if(web.getParent() instanceof ViewGroup) ((ViewGroup)web.getParent()).removeView(web);
             web.destroy(); web = null;
         }
-        playerSuspended = false; currentChannel = null; setFullscreenUi(false);
+        playerSuspended = false; resumeNative=false; currentChannel = null; setFullscreenUi(false);
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         // Do not swallow OK on entire websites: it must still activate their own links and buttons.
@@ -347,6 +366,7 @@ public final class MainActivity extends Activity {
         state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
     }
     @Override protected void onPause() {
+        sleepHandler.removeCallbacks(sleepTask);
         if(nativePlayer!=null) { resumeNative=nativePlayer.isPlaying(); nativePlayer.pause(); }
         if(web != null) {
             // Navigating to blank stops audio inside cross-origin player iframes as well.
@@ -356,11 +376,26 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume();
+        if(scheduleSleep()) return;
         if(nativePlayer!=null && resumeNative) { resumeNative=false; nativePlayer.play(); }
         if(web != null) {
             web.onResume();
-            if(playerSuspended && currentChannel != null) { playerSuspended = false; web.loadUrl(currentChannel.playerUrl); }
+            if(playerSuspended && currentChannel != null) { playerSuspended = false; web.loadUrl(currentChannel.playerUrl,PlaybackSettings.current.headers(currentChannel.playerUrl)); }
         }
     }
-    @Override protected void onDestroy() { if(catalogLive!=null && catalogObserver!=null) catalogLive.removeObserver(catalogObserver); network.shutdownNow(); stopPlayer(); super.onDestroy(); }
+    private boolean scheduleSleep() {
+        sleepHandler.removeCallbacks(sleepTask);
+        long deadline=SettingsStore.prefs(this).getLong("sleep_deadline",0);
+        if(deadline==0) return false;
+        long remaining=SettingsStore.remaining(deadline,System.currentTimeMillis());
+        if(remaining==0) { expireSleep(); return true; }
+        sleepHandler.postDelayed(sleepTask,remaining); return false;
+    }
+    private void expireSleep() {
+        sleepHandler.removeCallbacks(sleepTask); SettingsStore.prefs(this).edit().remove("sleep_deadline").apply();
+        stopPlayer(); if(ready) showHome();
+        Diagnostics.record(this,"INFO","temporizador","Temporizador finalizado. Reproducción detenida.");
+        Toast.makeText(this,"Temporizador finalizado.",Toast.LENGTH_LONG).show();
+    }
+    @Override protected void onDestroy() { sleepHandler.removeCallbacks(sleepTask); if(catalogLive!=null && catalogObserver!=null) catalogLive.removeObserver(catalogObserver); network.shutdownNow(); stopPlayer(); super.onDestroy(); }
 }

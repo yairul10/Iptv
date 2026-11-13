@@ -26,7 +26,10 @@ public final class CatalogManagerActivity extends Activity {
  private String pendingExport,exportMime,exportName;
  private CatalogDocument pendingImport;
  @Override public void onCreate(Bundle state) {
-  super.onCreate(state); repo=CatalogRepository.get(this);
+  super.onCreate(state); PinGate.require(this,() -> initializeScreen(state));
+ }
+ private void initializeScreen(Bundle state) {
+  repo=CatalogRepository.get(this); movies=getIntent().getBooleanExtra("movies",false);
   if(state!=null) { movies=state.getBoolean("movies"); importMovie=state.getBoolean("importMovie"); pendingExport=state.getString("export"); exportMime=state.getString("mime"); exportName=state.getString("filename"); }
   ScrollView scroll=new ScrollView(this); page=new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setPadding(24,20,24,20); page.setBackgroundColor(Color.rgb(11,18,32)); scroll.addView(page); setContentView(scroll);
   live=repo.observe(); observer=data -> { rows.clear(); if(data!=null) rows.addAll(data); if(ready) render(); }; live.observeForever(observer);
@@ -120,7 +123,7 @@ public final class CatalogManagerActivity extends Activity {
   })); dialog.show();
  }
  private void preview(CatalogDocument document) {
-  pendingImport=document;
+  pendingImport=document; Diagnostics.record(this,"INFO","importación","Vista previa: "+document.items.size()+" válidos, "+document.invalidCount+" inválidos, "+document.duplicates+" duplicados.");
   run(() -> repo.store.preview(document),(counts,error) -> {
    if(error!=null) { alert("No se pudo preparar el resumen",message(error)); return; }
    int film=0; Set<String> groups=new HashSet<>(); for(CatalogDocument.Item item:document.items) { if(item.movie) film++; groups.add(item.group); }
@@ -142,6 +145,7 @@ public final class CatalogManagerActivity extends Activity {
  private void prepareExport(boolean m3u) {
   run(() -> { CatalogDocument doc=CatalogDocument.fromRows(repo.store.dao.catalog()); return m3u?doc.toM3u():doc.toJson(); },(text,error) -> {
    if(error!=null) { alert("No se pudo exportar",message(error)); return; }
+   Diagnostics.record(this,"INFO","exportación",m3u?"Catálogo exportado a M3U.":"Catálogo exportado a JSON.");
    pendingExport=text; exportMime=m3u?"audio/x-mpegurl":"application/json"; exportName=m3u?"Mi-TV-catalogo.m3u":"Mi-TV-catalogo.json";
    new AlertDialog.Builder(this).setTitle(exportName).setItems(new String[]{"Guardar archivo","Compartir con otra app"},(d,which) -> { if(which==0) saveExport(); else shareExport(); }).show();
   });

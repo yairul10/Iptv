@@ -16,7 +16,9 @@ final class NetworkText {
             if(secure&&!"https".equals(url.getProtocol())) throw new IOException("Insecure redirect");
             HttpURLConnection c = (HttpURLConnection)url.openConnection();
             c.setConnectTimeout(10000); c.setReadTimeout(15000); c.setInstanceFollowRedirects(false);
-            c.setRequestProperty("User-Agent","MiTV-Android"); c.setUseCaches(false);
+            c.setRequestProperty("User-Agent",PlaybackSettings.current.userAgent.isEmpty()?"MiTV/0.5.0":PlaybackSettings.current.userAgent);
+            for(java.util.Map.Entry<String,String> header:PlaybackSettings.current.headers(url.toString()).entrySet()) c.setRequestProperty(header.getKey(),header.getValue());
+            c.setUseCaches(false);
             try {
                 int code = c.getResponseCode();
                 if(code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {

@@ -25,21 +25,21 @@ final class CatalogRepository {
  }
  LiveData<List<CatalogItem>> observe() { return store.dao.observeCatalog(); }
  <T> void submit(Task<T> task,Callback<T> callback) {
-  io.execute(() -> { T value=null; Exception failure=null; try { value=task.run(); } catch(Exception e) { failure=e; }
+  io.execute(() -> { T value=null; Exception failure=null; try { value=task.run(); } catch(Exception e) { failure=e; Diagnostics.record(app,"ERROR","catálogo","Operación no completada: "+e.getClass().getSimpleName()); }
    final T result=value; final Exception error=failure; if(callback!=null) main.post(() -> callback.done(result,error));
   });
  }
  void initialize(Callback<Void> callback) {
   submit(() -> { store.initialize(() -> {
    try(InputStream in=app.getAssets().open("channels.json")) { return read(in,CatalogDocument.MAX_BYTES); }
-  },app.getSharedPreferences("mi_tv",Context.MODE_PRIVATE)); return null; },callback);
+  },app.getSharedPreferences("mi_tv",Context.MODE_PRIVATE)); Diagnostics.record(app,"INFO","base","Catálogo Room preparado."); return null; },callback);
  }
  String syncNow() throws Exception {
   String url=store.dao.metadata("remote_url"); if(url==null) url=CatalogStore.DEFAULT_REMOTE;
   if(!NavigationPolicy.isPublicHttps(url)) throw new IllegalArgumentException("La sincronización remota requiere una URL HTTPS.");
   String source=NetworkText.get(url,CatalogDocument.MAX_BYTES);
   CatalogDocument doc=CatalogDocument.parseRemote(source);
-  return store.sync(url,doc);
+  String result=store.sync(url,doc); Diagnostics.record(app,"INFO","sincronización",result); return result;
  }
  static String read(InputStream in,int limit) throws IOException {
   if(in==null) throw new IOException("No se pudo abrir el archivo.");

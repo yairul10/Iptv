@@ -22,7 +22,7 @@ public final class UrlHealthWorker extends Worker {
  @NonNull @Override public Result doWork() {
   CatalogDao dao=AppDatabase.get(getApplicationContext()).catalog();
   if(!"1".equals(dao.metadata("initialized"))) return Result.retry();
-  List<ResolverEntity> batch=dao.healthBatch();
+  List<ResolverEntity> batch=dao.healthBatch(); Diagnostics.record(getApplicationContext(),"INFO","salud","Comprobación de "+batch.size()+" URLs.");
   ExecutorService probes=Executors.newFixedThreadPool(4);
   try {
    List<Callable<Void>> tasks=new ArrayList<>();
@@ -30,7 +30,10 @@ public final class UrlHealthWorker extends Worker {
     if(isStopped()) return null;
     int code=probe(resolver.sourceUrl); int failures=HealthPolicy.failures(code,resolver.failures);
     String health=HealthPolicy.status(code,failures);
-    if(!isStopped()&&!Thread.currentThread().isInterrupted()) dao.setHealth(resolver.id,resolver.sourceUrl,health,System.currentTimeMillis(),failures,code);
+    if(!isStopped()&&!Thread.currentThread().isInterrupted()) {
+     dao.setHealth(resolver.id,resolver.sourceUrl,health,System.currentTimeMillis(),failures,code);
+     Diagnostics.record(getApplicationContext(),"DOWN".equals(health)?"WARN":"INFO","salud",health+" · HTTP "+code+" · "+resolver.sourceUrl);
+    }
     return null;
    });
    probes.invokeAll(tasks,7,TimeUnit.MINUTES);
@@ -47,7 +50,8 @@ public final class UrlHealthWorker extends Worker {
     if(!CatalogDocument.validUrl(url.toString())) return -1;
     HttpURLConnection connection=(HttpURLConnection)url.openConnection();
     connection.setConnectTimeout(3500); connection.setReadTimeout(3500); connection.setInstanceFollowRedirects(false);
-    connection.setRequestMethod(useGet?"GET":"HEAD"); connection.setRequestProperty("User-Agent","MiTV-URL-Health");
+    connection.setRequestMethod(useGet?"GET":"HEAD"); connection.setRequestProperty("User-Agent",PlaybackSettings.current.userAgent.isEmpty()?"MiTV/0.5.0":PlaybackSettings.current.userAgent);
+    for(java.util.Map.Entry<String,String> header:PlaybackSettings.current.headers(url.toString()).entrySet()) connection.setRequestProperty(header.getKey(),header.getValue());
     if(useGet) connection.setRequestProperty("Range","bytes=0-0");
     try {
      int code=connection.getResponseCode();

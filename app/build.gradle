@@ -8,8 +8,9 @@ android {
         targetSdk 35
         javaCompileOptions { annotationProcessorOptions { arguments += ["room.schemaLocation": "$projectDir/schemas".toString()] } }
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
-        versionName '0.4.0'
+        versionName '0.5.0'
     }
+    sourceSets { test.resources.srcDir("$projectDir/schemas") }
     testOptions { unitTests.includeAndroidResources = true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     if (System.getenv('SIGNING_STORE_FILE')) {

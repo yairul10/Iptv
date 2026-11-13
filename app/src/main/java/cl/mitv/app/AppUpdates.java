@@ -18,10 +18,14 @@ final class AppUpdates {
     private static final String MANIFEST = "https://github.com/yairul10/Iptv/releases/latest/download/update.json";
     private boolean checking;
 
-    void check(Activity activity, ExecutorService executor) {
+    void check(Activity activity,ExecutorService executor) { check(activity,executor,true); }
+    void check(Activity activity, ExecutorService executor,boolean manual) {
+        android.content.SharedPreferences preferences=SettingsStore.prefs(activity);
+        if(!manual && System.currentTimeMillis()-preferences.getLong("update_checked",0)<24*60*60*1000L) return;
         if(checking) return;
         checking = true;
-        Toast.makeText(activity,"Buscando una actualización…",Toast.LENGTH_SHORT).show();
+        if(manual) Toast.makeText(activity,"Buscando una actualización…",Toast.LENGTH_SHORT).show();
+        Diagnostics.record(activity,"INFO","versión","Comprobando JSON remoto de actualización.");
         executor.execute(() -> {
             try {
                 JSONObject update = new JSONObject(NetworkText.get(MANIFEST,32768));
@@ -46,12 +50,17 @@ final class AppUpdates {
                     digest.toString(),update.getString("certificateSha256"),url) && offered > installed)
                     throw new IllegalStateException("Incompatible update");
                 String version = update.getString("versionName");
+                if(version.length()>80) throw new IllegalArgumentException("Invalid version label");
+                preferences.edit().putLong("update_checked",System.currentTimeMillis()).apply();
+                Diagnostics.record(activity,"INFO","versión",offered>installed?"Actualización compatible disponible.":"La app está al día.");
                 activity.runOnUiThread(() -> {
                     checking = false;
                     if(activity.isFinishing() || activity.isDestroyed()) return;
                     if(offered <= installed) {
-                        Toast.makeText(activity,"Ya tienes la versión más reciente.",Toast.LENGTH_LONG).show(); return;
+                        if(manual) Toast.makeText(activity,"Ya tienes la versión más reciente.",Toast.LENGTH_LONG).show(); return;
                     }
+                    if(!manual && (preferences.getLong("update_prompted",0)>=offered || !activity.getWindow().getDecorView().hasWindowFocus())) return;
+                    preferences.edit().putLong("update_prompted",offered).apply();
                     new AlertDialog.Builder(activity).setTitle("Mi TV " + version + " disponible")
                         .setMessage("Se descargará el APK desde GitHub. Ábrelo al terminar y elige Actualizar. Android te pedirá confirmar la instalación. Tus favoritos y resultados se conservan.")
                         .setPositiveButton("Descargar",(d,w) -> {
@@ -60,9 +69,10 @@ final class AppUpdates {
                         }).setNegativeButton("Más tarde",null).show();
                 });
             } catch(Exception e) {
+                Diagnostics.record(activity,"WARN","versión","No se pudo comprobar la actualización: "+e.getClass().getSimpleName());
                 activity.runOnUiThread(() -> {
                     checking = false;
-                    if(!activity.isFinishing() && !activity.isDestroyed())
+                    if(manual && !activity.isFinishing() && !activity.isDestroyed())
                         new AlertDialog.Builder(activity).setTitle("No se pudo comprobar la actualización")
                             .setMessage("Comprueba tu conexión e inténtalo más tarde. No se ofrecerá una actualización con otra firma o incompatible con esta instalación.")
                             .setPositiveButton("Entendido",null).show();
