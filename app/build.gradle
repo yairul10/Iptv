@@ -1,6 +1,7 @@
 plugins { id 'com.android.application' }
 android {
     namespace 'cl.mitv.app'
+    buildFeatures { buildConfig true }
     compileSdk 35
     defaultConfig {
         applicationId 'cl.mitv.app.preview'
@@ -8,7 +9,7 @@ android {
         targetSdk 35
         javaCompileOptions { annotationProcessorOptions { arguments += ["room.schemaLocation": "$projectDir/schemas".toString()] } }
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
-        versionName '0.5.3'
+        versionName '0.6.0'
     }
     sourceSets { test.resources.srcDir("$projectDir/schemas") }
     testOptions { unitTests.includeAndroidResources = true }

@@ -62,6 +62,7 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private WebView web;
     private LinearLayout playerLayout;
+    private LinearLayout channelBar;
     private View customView;
     private WebChromeClient.CustomViewCallback customCallback;
     private TextView status;
@@ -172,7 +173,7 @@ public final class MainActivity extends Activity {
             LinearLayout row=new LinearLayout(this); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12),dp(5),dp(5),dp(5)); row.setMinimumHeight(dp(64)); row.setBackground(background(CARD,Color.TRANSPARENT));
             LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2); rowParams.setMargins(0,dp(4),0,dp(4)); page.addView(row,rowParams);
-            TextView title=text(channel.name,18,Color.WHITE); title.setTypeface(null,Typeface.BOLD); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            TextView title=text(channelLabel(channel),18,Color.WHITE); title.setTypeface(null,Typeface.BOLD); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             row.addView(title,new LinearLayout.LayoutParams(0,-2,1));
             ImageButton play=catalogIcon(R.drawable.ic_play,"Reproducir "+channel.name,channel,"play",() -> { rememberHome(channel); showPlayer(channel); });
             ImageButton star=catalogIcon(favorite?R.drawable.ic_star_filled:R.drawable.ic_star_outline,(favorite?"Quitar de favoritos ":"Añadir a favoritos ")+channel.name,channel,"favorite",() -> {
@@ -186,7 +187,7 @@ public final class MainActivity extends Activity {
             if(channel.id.equals(focusedChannelId)) focusTarget="favorite".equals(focusedAction)?star:play;
         }
         if(count == 0) page.addView(text("No hay canales en este filtro. Prueba otra categoría o vuelve a todos los canales.",18,Color.LTGRAY));
-        page.addView(text("Mi TV · 0.5.1",13,Color.GRAY));
+        page.addView(text("Mi TV · "+BuildConfig.VERSION_NAME,13,Color.GRAY));
         addButton(page,button("Ajustes",() -> startActivity(new Intent(this,SettingsActivity.class))));
         addButton(page,button("Diagnóstico",() -> startActivity(new Intent(this,DiagnosticsActivity.class))));
         addButton(page,button("Gestionar películas",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",true))));
@@ -234,7 +235,8 @@ public final class MainActivity extends Activity {
         addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } }));
         addControl(controls,button("Resultado",() -> markResult(channel,true)));
         addControl(controls,button("Página oficial",() -> openBrowser(channel.siteUrl)));
-        final TextView playerStatus = text("Cargando " + channel.name + "…",13,Color.LTGRAY);
+        if(!channel.movie) addChannelBar();
+        final TextView playerStatus = text("Cargando " + channelLabel(channel) + "…",13,Color.LTGRAY);
         status = playerStatus; status.setPadding(dp(12),0,dp(12),dp(4)); playerLayout.addView(status);
         final ProgressBar playerProgress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress = playerProgress; playerLayout.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
@@ -253,7 +255,7 @@ public final class MainActivity extends Activity {
             nativePlayer.addListener(new androidx.media3.common.Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) {
                     playerProgress.setVisibility(state==androidx.media3.common.Player.STATE_BUFFERING?View.VISIBLE:View.GONE);
-                    playerStatus.setText(channel.name+" · Controles del reproductor");
+                    playerStatus.setText(channelLabel(channel)+" · Controles del reproductor");
                 }
                 @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
                     Diagnostics.record(MainActivity.this,"ERROR","reproducción","Error de video directo: "+error.getErrorCodeName());
@@ -277,7 +279,7 @@ public final class MainActivity extends Activity {
                 playerStatus.setText("No se pudo cargar " + channel.name + ". Prueba Recargar o Página oficial.");
             }
             @Override public void onPageStarted(WebView view,String page,android.graphics.Bitmap icon) {
-                failed = false; playerProgress.setVisibility(View.VISIBLE); playerStatus.setText("Cargando " + channel.name + "…");
+                failed = false; playerProgress.setVisibility(View.VISIBLE); playerStatus.setText("Cargando " + channelLabel(channel) + "…");
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 if(!request.isForMainFrame()) return false;
@@ -291,7 +293,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageFinished(WebView view,String page) {
-                if(!failed) playerStatus.setText(channel.name + (channel.directPlayer
+                if(!failed) playerStatus.setText(channelLabel(channel) + (channel.directPlayer
                     ? " · Pulsa Play o el botón OK. Atrás para volver."
                     : " · Usa Play y los controles de la página oficial."));
             }
@@ -303,11 +305,36 @@ public final class MainActivity extends Activity {
             @Override public void onShowCustomView(View view,CustomViewCallback callback) {
                 if(customView != null) { callback.onCustomViewHidden(); return; }
                 customView = view; customCallback = callback;
-                playerLayout.setVisibility(View.GONE); root.addView(view,new FrameLayout.LayoutParams(-1,-1)); setFullscreenUi(true);
+                playerLayout.setVisibility(View.GONE); root.addView(view,new FrameLayout.LayoutParams(-1,-1)); if(channelBar!=null) channelBar.bringToFront(); setFullscreenUi(true);
             }
             @Override public void onHideCustomView() { hideCustomView(); }
         });
         playerLayout.addView(web,new LinearLayout.LayoutParams(-1,0,1)); web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); web.requestFocus();
+    }
+    private String channelLabel(CatalogItem item) {
+        int number=ChannelNavigation.number(channels,item);
+        return number>0 ? number+" · "+item.name : item.name;
+    }
+    private void addChannelBar() {
+        channelBar=new LinearLayout(this); channelBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        channelBar.setBackgroundColor(BG); channelBar.setPadding(dp(4),0,dp(4),0);
+        Button previous=button("CH −",() -> switchChannel(-1)); previous.setContentDescription("Canal anterior"); previous.setTag("channelPrevious");
+        Button next=button("CH +",() -> switchChannel(1)); next.setContentDescription("Canal siguiente"); next.setTag("channelNext");
+        channelBar.addView(previous,new LinearLayout.LayoutParams(dp(80),-1));
+        TextView label=text(channelLabel(currentChannel),14,Color.WHITE); label.setMaxLines(2); label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        channelBar.addView(label,new LinearLayout.LayoutParams(0,-2,1));
+        channelBar.addView(next,new LinearLayout.LayoutParams(dp(80),-1));
+        FrameLayout.LayoutParams place=new FrameLayout.LayoutParams(-1,dp(56),android.view.Gravity.BOTTOM);
+        root.addView(channelBar,place); playerLayout.setPadding(0,0,0,dp(56));
+    }
+    private void switchChannel(int direction) {
+        CatalogItem next=ChannelNavigation.adjacent(channels,currentChannel,direction,selectedCategory,favoritesOnly);
+        if(next==null) { Toast.makeText(this,"No hay otros canales en este filtro.",Toast.LENGTH_SHORT).show(); return; }
+        if(next.id.equals(currentChannel.id)) { Toast.makeText(this,"Solo hay un canal en este filtro.",Toast.LENGTH_SHORT).show(); return; }
+        boolean expanded=customView!=null || playerLayout.getChildAt(0).getVisibility()==View.GONE;
+        rememberHome(next); showPlayer(next);
+        if(expanded) toggleFullscreen();
+        View focus=root.findViewWithTag(direction<0?"channelPrevious":"channelNext"); if(focus!=null) focus.requestFocus();
     }
     private void addControl(LinearLayout row,Button b) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2,-2); p.setMargins(dp(3),0,dp(3),0); row.addView(b,p);
@@ -340,6 +367,7 @@ public final class MainActivity extends Activity {
     }
     private void stopPlayer() {
         hideCustomView();
+        if(channelBar!=null) { root.removeView(channelBar); channelBar=null; }
         if(nativePlayer!=null) { nativePlayer.release(); nativePlayer=null; }
         if(web != null) {
             web.stopLoading(); web.setWebChromeClient(null); web.setWebViewClient(new WebViewClient()); web.loadUrl("about:blank");
@@ -349,6 +377,10 @@ public final class MainActivity extends Activity {
         playerSuspended = false; resumeNative=false; currentChannel = null; setFullscreenUi(false);
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(currentChannel!=null && !currentChannel.movie && (event.getKeyCode()==KeyEvent.KEYCODE_CHANNEL_UP || event.getKeyCode()==KeyEvent.KEYCODE_CHANNEL_DOWN)) {
+            if(event.getAction()==KeyEvent.ACTION_DOWN && event.getRepeatCount()==0) switchChannel(event.getKeyCode()==KeyEvent.KEYCODE_CHANNEL_UP?1:-1);
+            return true;
+        }
         // Do not swallow OK on entire websites: it must still activate their own links and buttons.
         if(web != null && currentChannel != null && currentChannel.directPlayer && web.hasFocus()
                 && (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER || event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
