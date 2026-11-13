@@ -259,6 +259,26 @@ public final class MainActivity extends Activity {
                 });
             }).show();
     }
+    private void confirmDeletePlaying(CatalogItem channel) {
+        if(deleting || currentChannel!=channel) return;
+        PinGate.require(this,() -> {
+            if(isFinishing() || isDestroyed() || currentChannel!=channel) return;
+            new AlertDialog.Builder(this).setTitle(channel.movie?"Borrar película":"Borrar canal")
+                .setMessage("¿Quieres quitar \""+channel.name+"\" de tu lista? La sincronización no volverá a añadirlo.")
+                .setNegativeButton("Cancelar",null).setPositiveButton("Borrar",(dialog,which) -> {
+                    if(deleting) return;
+                    deleting=true;
+                    repository.submit(() -> repository.store.deleteMany(java.util.Collections.singletonList(channel.id),channel.movie),(count,error) -> {
+                        if(isFinishing() || isDestroyed()) return;
+                        deleting=false;
+                        if(error==null) {
+                            Toast.makeText(this,channel.movie?"Película eliminada.":"Canal eliminado.",Toast.LENGTH_SHORT).show();
+                            if(currentChannel==channel) { homeScrollY=0; showHome(); }
+                        } else Toast.makeText(this,"No se pudo borrar. Inténtalo de nuevo.",Toast.LENGTH_LONG).show();
+                    });
+                }).show();
+        },() -> { });
+    }
     private void rememberHome(CatalogItem channel) { focusedChannelId=channel.id; if(homeScroll!=null) homeScrollY=homeScroll.getScrollY(); }
     private int resultFor(CatalogItem channel) { return Math.max(0,Math.min(2,channel.testResult)); }
     private void markResult(CatalogItem channel,boolean fromPlayer) {
@@ -280,6 +300,7 @@ public final class MainActivity extends Activity {
         LinearLayout controls = new LinearLayout(this); controls.setPadding(dp(8),dp(4),dp(8),dp(4));
         controlsScroll.addView(controls); playerLayout.addView(controlsScroll);
         addControl(controls,button("Canales",this::showHome));
+        addControl(controls,button(channel.movie?"Borrar película":"Borrar canal",() -> confirmDeletePlaying(channel)));
         addControl(controls,button("Play / pausa",this::togglePlayback));
         addControl(controls,button("Ampliar vista",this::toggleFullscreen));
         addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } }));
