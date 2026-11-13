@@ -4,7 +4,12 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.Observer;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.PlayerView;
+import androidx.media3.common.MediaItem;
+import cl.mitv.app.data.CatalogItem;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -44,11 +49,16 @@ import java.util.concurrent.ExecutorService;
 public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(11,18,32), CARD = Color.rgb(23,35,53), MINT = Color.rgb(105,227,197);
     private static final String[] RESULTS = {"Pendiente", "Funciona", "No funciona"};
-    private final List<Channel> channels = new ArrayList<>();
+    private final List<CatalogItem> channels = new ArrayList<>();
     private final ExecutorService network = Executors.newSingleThreadExecutor();
     private final AppUpdates appUpdates = new AppUpdates();
     private boolean catalogLoading;
-    private SharedPreferences prefs;
+    private CatalogRepository repository;
+    private LiveData<List<CatalogItem>> catalogLive;
+    private Observer<List<CatalogItem>> catalogObserver;
+    private boolean ready, showMovies;
+    private ExoPlayer nativePlayer;
+    private boolean resumeNative;
     private FrameLayout root;
     private WebView web;
     private LinearLayout playerLayout;
@@ -56,7 +66,7 @@ public final class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback customCallback;
     private TextView status;
     private ProgressBar progress;
-    private Channel currentChannel;
+    private CatalogItem currentChannel;
     private String selectedCategory = "Todos", focusedChannelId = "";
     private boolean favoritesOnly;
     private ScrollView homeScroll;
@@ -65,27 +75,35 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        prefs = getSharedPreferences("mi_tv", MODE_PRIVATE);
+        repository = CatalogRepository.get(this);
         if(state != null) {
             selectedCategory = state.getString("category", "Todos");
             favoritesOnly = state.getBoolean("favorites", false);
+            showMovies = state.getBoolean("movies",false);
             focusedChannelId = state.getString("focus", "");
             homeScrollY = state.getInt("scroll", 0);
         }
         root = new FrameLayout(this); root.setBackgroundColor(BG); setContentView(root);
-        try (InputStream in = getAssets().open("channels.json"); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[4096]; int n;
-            while((n = in.read(buffer)) != -1) out.write(buffer,0,n);
-            String bundled = out.toString(StandardCharsets.UTF_8.name());
-            String cached = prefs.getString("catalog_json",null);
-            try { channels.addAll(ChannelCatalog.parse(cached == null ? bundled : cached)); }
-            catch(Exception invalidCache) { channels.addAll(ChannelCatalog.parse(bundled)); prefs.edit().remove("catalog_json").apply(); }
-        } catch(Exception e) {
-            new AlertDialog.Builder(this).setTitle("No se pudo cargar la lista")
-                .setMessage("Vuelve a instalar Mi TV para recuperar el catálogo.").setPositiveButton("Cerrar",(d,w) -> finish()).show();
-        }
-        showHome();
-        refreshCatalog(false);
+        root.addView(text("Preparando catálogo…",20,Color.WHITE));
+        catalogLive = repository.observe();
+        catalogObserver = rows -> {
+            if(isFinishing() || isDestroyed()) return;
+            channels.clear(); if(rows != null) channels.addAll(rows);
+            if(ready && web == null && nativePlayer == null) {
+                if(homeScroll != null) homeScrollY = homeScroll.getScrollY();
+                showHome();
+            }
+        };
+        catalogLive.observeForever(catalogObserver);
+        repository.initialize((unused,error) -> {
+            if(isFinishing() || isDestroyed()) return;
+            if(error != null) {
+                new AlertDialog.Builder(this).setTitle("No se pudo abrir el catálogo")
+                    .setMessage("No se borraron tus datos. Cierra y vuelve a abrir Mi TV para reintentar.").setPositiveButton("Cerrar",(d,w) -> finish()).show();
+                return;
+            }
+            ready = true; showHome(); UrlHealthWorker.schedule(this); refreshCatalog(false);
+        });
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private TextView text(String value, int size, int color) {
@@ -113,14 +131,17 @@ public final class MainActivity extends Activity {
         LinearLayout page = column(); page.setPadding(dp(24),dp(24),dp(24),dp(24));
         homeScroll.addView(page); root.addView(homeScroll);
         TextView heading = text("Mi TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
-        page.addView(text(channels.size() + " canales · Tu televisión, a un toque.",17,Color.LTGRAY));
+        long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
+        page.addView(text(total + (showMovies ? " películas" : " canales") + " · Tu televisión, a un toque.",17,Color.LTGRAY));
+        addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { showMovies=!showMovies; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
+        addButton(page,button("Administrar / importar / exportar",() -> startActivity(new Intent(this,CatalogManagerActivity.class))));
         addButton(page,button(favoritesOnly ? "Ver todos los canales" : "Ver favoritos",() -> {
             favoritesOnly = !favoritesOnly; homeScrollY = 0; focusedChannelId = ""; showHome();
         }));
         HorizontalScrollView filters = new HorizontalScrollView(this);
         LinearLayout filterRow = new LinearLayout(this); filters.addView(filterRow); page.addView(filters);
         LinkedHashSet<String> categories = new LinkedHashSet<>(); categories.add("Todos");
-        for(Channel channel : channels) categories.add(channel.category);
+        for(CatalogItem channel : channels) if(channel.movie==showMovies) categories.add(channel.category);
         if(!categories.contains(selectedCategory)) selectedCategory = "Todos";
         for(String category : categories) {
             Button filter = button((category.equals(selectedCategory) ? "✓ " : "") + category,() -> {
@@ -129,8 +150,9 @@ public final class MainActivity extends Activity {
             addControl(filterRow,filter);
         }
         int count = 0; Button focusTarget = null;
-        for(Channel channel : channels) {
-            boolean favorite = prefs.getBoolean(channel.id + "_favorite",false);
+        for(CatalogItem channel : channels) {
+            if(channel.movie!=showMovies) continue;
+            boolean favorite = channel.favorite;
             if((favoritesOnly && !favorite) || (!selectedCategory.equals("Todos") && !selectedCategory.equals(channel.category))) continue;
             count++;
             LinearLayout card = column(); card.setPadding(dp(18),dp(12),dp(18),dp(12)); card.setBackground(background(CARD,Color.TRANSPARENT));
@@ -138,23 +160,25 @@ public final class MainActivity extends Activity {
             card.addView(text(channel.category.toUpperCase(java.util.Locale.ROOT),12,MINT));
             TextView title = text(channel.name,25,Color.WHITE); title.setTypeface(null,Typeface.BOLD); card.addView(title);
             card.addView(text(channel.description,15,Color.LTGRAY));
+            if("DOWN".equals(channel.health)) card.addView(text("URL caída · última comprobación",13,Color.rgb(255,170,130)));
+            else if("UP".equals(channel.health)) card.addView(text("URL accesible · no confirma reproducción",12,Color.GRAY));
             int result = resultFor(channel);
             card.addView(text("Prueba en este equipo: " + RESULTS[result],13,result == 1 ? MINT : Color.LTGRAY));
-            Button watch = button("Ver en vivo",() -> {
+            Button watch = button(channel.movie ? "Ver película" : "Ver en vivo",() -> {
                 rememberHome(channel); showPlayer(channel);
             }); addButton(card,watch);
             watch.setContentDescription("Ver en vivo " + channel.name);
             if(focusTarget == null || channel.id.equals(focusedChannelId)) focusTarget = watch;
             LinearLayout actions = new LinearLayout(this);
             Button star = button(favorite ? "★ Favorito" : "☆ Favorito",() -> {
-                rememberHome(channel); prefs.edit().putBoolean(channel.id + "_favorite",!favorite).apply(); showHome();
+                rememberHome(channel); repository.submit(() -> { repository.store.favorite(channel,!favorite); return null; },(v,e) -> { if(e!=null) Toast.makeText(this,"No se pudo guardar el favorito.",Toast.LENGTH_LONG).show(); });
             }); star.setContentDescription((favorite ? "Quitar de favoritos " : "Agregar a favoritos ") + channel.name);
             addControl(actions,star);
             addControl(actions,button("Resultado",() -> markResult(channel,false)));
             HorizontalScrollView actionsScroll = new HorizontalScrollView(this); actionsScroll.addView(actions); card.addView(actionsScroll);
         }
         if(count == 0) page.addView(text("No hay canales en este filtro. Prueba otra categoría o vuelve a todos los canales.",18,Color.LTGRAY));
-        page.addView(text("Mi TV · 0.3.0",13,Color.GRAY));
+        page.addView(text("Mi TV · 0.4.0",13,Color.GRAY));
         addButton(page,button("Actualizar canales",() -> refreshCatalog(true)));
         addButton(page,button("Buscar actualización de la app",() -> appUpdates.check(this,network)));
         addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Mi TV")
@@ -165,45 +189,27 @@ public final class MainActivity extends Activity {
         scroll.post(() -> scroll.scrollTo(0,homeScrollY));
     }
     private void refreshCatalog(boolean manual) {
-        if(catalogLoading) { if(manual) Toast.makeText(this,"La lista se está actualizando…",Toast.LENGTH_SHORT).show(); return; }
-        catalogLoading = true;
-        if(manual) Toast.makeText(this,"Buscando canales…",Toast.LENGTH_SHORT).show();
-        network.execute(() -> {
-            try {
-                String source = NetworkText.get(ChannelCatalog.URL,262144);
-                List<Channel> fresh = ChannelCatalog.parse(source);
-                boolean changed = !source.equals(prefs.getString("catalog_json",""));
-                prefs.edit().putString("catalog_json",source).apply();
-                runOnUiThread(() -> {
-                    catalogLoading = false;
-                    if(isFinishing() || isDestroyed()) return;
-                    channels.clear(); channels.addAll(fresh);
-                    if(web == null && changed) {
-                        if(homeScroll != null) homeScrollY = homeScroll.getScrollY();
-                        showHome();
-                    }
-                    if(manual) Toast.makeText(this,"Lista actualizada: " + fresh.size() + " canales.",Toast.LENGTH_LONG).show();
-                });
-            } catch(Exception e) {
-                runOnUiThread(() -> {
-                    catalogLoading = false;
-                    if(manual && !isFinishing() && !isDestroyed()) Toast.makeText(this,"No se pudo actualizar. Se mantiene la última lista disponible.",Toast.LENGTH_LONG).show();
-                });
-            }
+        if(catalogLoading || !ready) return;
+        catalogLoading=true;
+        if(manual) Toast.makeText(this,"Sincronizando catálogo…",Toast.LENGTH_SHORT).show();
+        repository.submit(() -> repository.syncNow(),(message,error) -> {
+            catalogLoading=false;
+            if(!isFinishing() && !isDestroyed() && manual) Toast.makeText(this,error==null?message:"No se pudo sincronizar. Se mantiene el catálogo local.",Toast.LENGTH_LONG).show();
         });
     }
-    private void rememberHome(Channel channel) { focusedChannelId = channel.id; if(homeScroll != null) homeScrollY = homeScroll.getScrollY(); }
-    private int resultFor(Channel channel) { return Math.max(0,Math.min(2,prefs.getInt(channel.id + "_result",0))); }
-    private void markResult(Channel channel, boolean fromPlayer) {
-        new AlertDialog.Builder(this).setTitle(channel.name + " · Este equipo")
+    private void rememberHome(CatalogItem channel) { focusedChannelId=channel.id; if(homeScroll!=null) homeScrollY=homeScroll.getScrollY(); }
+    private int resultFor(CatalogItem channel) { return Math.max(0,Math.min(2,channel.testResult)); }
+    private void markResult(CatalogItem channel,boolean fromPlayer) {
+        new AlertDialog.Builder(this).setTitle(channel.name+" · Este equipo")
             .setSingleChoiceItems(RESULTS,resultFor(channel),(dialog,which) -> {
-                prefs.edit().putInt(channel.id + "_result",which).apply(); dialog.dismiss();
-                if(!fromPlayer) { rememberHome(channel); showHome(); }
-                else Toast.makeText(this,"Resultado guardado: " + RESULTS[which],Toast.LENGTH_SHORT).show();
+                dialog.dismiss(); rememberHome(channel);
+                repository.submit(() -> { repository.store.result(channel,which); return null; },(v,error) -> {
+                    if(!isFinishing()&&!isDestroyed()) Toast.makeText(this,error==null?"Resultado guardado.":"No se pudo guardar.",Toast.LENGTH_SHORT).show();
+                });
             }).setNegativeButton("Cerrar",null).show();
     }
     @SuppressWarnings("SetJavaScriptEnabled")
-    private void showPlayer(Channel channel) {
+    private void showPlayer(CatalogItem channel) {
         stopPlayer(); currentChannel = channel; playerSuspended = false; root.removeAllViews();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         playerLayout = column(); root.addView(playerLayout,new FrameLayout.LayoutParams(-1,-1));
@@ -213,13 +219,30 @@ public final class MainActivity extends Activity {
         addControl(controls,button("Canales",this::showHome));
         addControl(controls,button("Play / pausa",this::togglePlayback));
         addControl(controls,button("Ampliar vista",this::toggleFullscreen));
-        addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl); }));
+        addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } }));
         addControl(controls,button("Resultado",() -> markResult(channel,true)));
         addControl(controls,button("Página oficial",() -> openBrowser(channel.siteUrl)));
         final TextView playerStatus = text("Cargando " + channel.name + "…",13,Color.LTGRAY);
         status = playerStatus; status.setPadding(dp(12),0,dp(12),dp(4)); playerLayout.addView(status);
         final ProgressBar playerProgress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress = playerProgress; playerLayout.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
+        if("STREAM".equals(channel.mode)) {
+            nativePlayer=new ExoPlayer.Builder(this).build();
+            nativePlayer.setAudioAttributes(new androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(),true);
+            PlayerView video=new PlayerView(this); video.setPlayer(nativePlayer);
+            playerLayout.addView(video,new LinearLayout.LayoutParams(-1,0,1));
+            nativePlayer.addListener(new androidx.media3.common.Player.Listener() {
+                @Override public void onPlaybackStateChanged(int state) {
+                    playerProgress.setVisibility(state==androidx.media3.common.Player.STATE_BUFFERING?View.VISIBLE:View.GONE);
+                    playerStatus.setText(channel.name+" · Controles del reproductor");
+                }
+                @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                    playerProgress.setVisibility(View.GONE); playerStatus.setText("No se pudo reproducir. Revisa la URL y el modo en Editar.");
+                }
+            });
+            nativePlayer.setMediaItem(MediaItem.fromUri(channel.playerUrl)); nativePlayer.prepare(); nativePlayer.play(); video.requestFocus();
+            return;
+        }
         web = new WebView(this); web.setBackgroundColor(Color.BLACK);
         WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(true); settings.setLoadWithOverviewMode(true); settings.setUseWideViewPort(true);
@@ -238,7 +261,7 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 if(!request.isForMainFrame()) return false;
                 String target = request.getUrl().toString();
-                if(NavigationPolicy.isChannelHttps(target,channel.playerUrl,channel.siteUrl)) return false;
+                if(NavigationPolicy.isChannelUrl(target,channel.playerUrl,channel.siteUrl)) return false;
                 if(request.hasGesture() && "https".equalsIgnoreCase(request.getUrl().getScheme())) openBrowser(target);
                 return true;
             }
@@ -265,15 +288,16 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2,-2); p.setMargins(dp(3),0,dp(3),0); row.addView(b,p);
     }
     private void togglePlayback() {
+        if(nativePlayer!=null) { if(nativePlayer.isPlaying()) nativePlayer.pause(); else nativePlayer.play(); return; }
         if(web == null) return;
         web.evaluateJavascript("(function(){var v=document.querySelector('video');if(!v)return false;if(v.paused){v.muted=false;v.play().catch(function(){});}else{v.pause();}return true;})()",
             result -> { if("false".equals(result)) Toast.makeText(this,"Usa Play en el reproductor de la página oficial.",Toast.LENGTH_LONG).show(); });
     }
     private void toggleFullscreen() {
-        if(web == null) return;
+        if(web == null && nativePlayer == null) return;
         boolean visible = playerLayout.getChildAt(0).getVisibility() == View.VISIBLE;
         playerLayout.getChildAt(0).setVisibility(visible ? View.GONE : View.VISIBLE);
-        status.setVisibility(visible ? View.GONE : View.VISIBLE); setFullscreenUi(visible); web.requestFocus();
+        status.setVisibility(visible ? View.GONE : View.VISIBLE); setFullscreenUi(visible); if(web!=null) web.requestFocus();
     }
     private void setFullscreenUi(boolean enabled) {
         getWindow().getDecorView().setSystemUiVisibility(enabled ? View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
@@ -291,6 +315,7 @@ public final class MainActivity extends Activity {
     }
     private void stopPlayer() {
         hideCustomView();
+        if(nativePlayer!=null) { nativePlayer.release(); nativePlayer=null; }
         if(web != null) {
             web.stopLoading(); web.setWebChromeClient(null); web.setWebViewClient(new WebViewClient()); web.loadUrl("about:blank");
             if(web.getParent() instanceof ViewGroup) ((ViewGroup)web.getParent()).removeView(web);
@@ -307,14 +332,14 @@ public final class MainActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
     @Override public boolean onKeyDown(int key,KeyEvent event) {
-        if(web != null && key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { togglePlayback(); return true; }
-        if(web != null && key == KeyEvent.KEYCODE_MENU) { toggleFullscreen(); return true; }
+        if((web != null || nativePlayer != null) && key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { togglePlayback(); return true; }
+        if((web != null || nativePlayer != null) && key == KeyEvent.KEYCODE_MENU) { toggleFullscreen(); return true; }
         return super.onKeyDown(key,event);
     }
     @Override public void onBackPressed() {
         if(customView != null) { hideCustomView(); return; }
-        if(web != null && playerLayout.getChildAt(0).getVisibility() == View.GONE) { toggleFullscreen(); return; }
-        if(web != null) { showHome(); return; }
+        if((web != null || nativePlayer != null) && playerLayout.getChildAt(0).getVisibility() == View.GONE) { toggleFullscreen(); return; }
+        if(web != null || nativePlayer != null) { showHome(); return; }
         if(favoritesOnly || !selectedCategory.equals("Todos")) {
             favoritesOnly = false; selectedCategory = "Todos"; homeScrollY = 0; showHome(); return;
         }
@@ -322,10 +347,11 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
-        state.putString("category",selectedCategory); state.putBoolean("favorites",favoritesOnly);
+        state.putBoolean("movies",showMovies); state.putString("category",selectedCategory); state.putBoolean("favorites",favoritesOnly);
         state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
     }
     @Override protected void onPause() {
+        if(nativePlayer!=null) { resumeNative=nativePlayer.isPlaying(); nativePlayer.pause(); }
         if(web != null) {
             // Navigating to blank stops audio inside cross-origin player iframes as well.
             hideCustomView(); web.loadUrl("about:blank"); web.onPause(); playerSuspended = true;
@@ -334,10 +360,11 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume();
+        if(nativePlayer!=null && resumeNative) { resumeNative=false; nativePlayer.play(); }
         if(web != null) {
             web.onResume();
             if(playerSuspended && currentChannel != null) { playerSuspended = false; web.loadUrl(currentChannel.playerUrl); }
         }
     }
-    @Override protected void onDestroy() { network.shutdownNow(); stopPlayer(); super.onDestroy(); }
+    @Override protected void onDestroy() { if(catalogLive!=null && catalogObserver!=null) catalogLive.removeObserver(catalogObserver); network.shutdownNow(); stopPlayer(); super.onDestroy(); }
 }

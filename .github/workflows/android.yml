@@ -5,6 +5,7 @@ on:
     paths-ignore:
       - app/src/main/assets/channels.json
       - README.md
+      - remote/catalog.json
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,6 +53,14 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose entrega/Mi-TV.apk
           sha256sum entrega/Mi-TV.apk > entrega/SHA256.txt
           python3 tools/release_manifest.py
+      - name: Exportar esquema Room
+        run: |
+          python3 - <<'PYSCHEMA'
+          import base64
+          from pathlib import Path
+          schema=Path('app/schemas/cl.mitv.app.data.AppDatabase/1.json')
+          print('ROOM_SCHEMA_BASE64='+base64.b64encode(schema.read_bytes()).decode())
+          PYSCHEMA
       - name: Descargar APK
         if: env.KEYSTORE_AVAILABLE == 'true'
         uses: actions/upload-artifact@v4
@@ -64,8 +73,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.3.0-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.3.0 (${GITHUB_RUN_NUMBER})" --notes 'Mi TV con firma fija, catálogo remoto y búsqueda de actualizaciones. La migración desde 0.1/0.2 requiere reinstalar una última vez porque la antigua firma de prueba no se guardó. Las versiones 0.3 y posteriores se actualizan con el mismo identificador y firma.' --latest
+          tag="v0.4.0-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.4.0 (${GITHUB_RUN_NUMBER})" --notes 'Mi TV con firma fija, catálogo remoto y búsqueda de actualizaciones. La migración desde 0.1/0.2 requiere reinstalar una última vez porque la antigua firma de prueba no se guardó. Las versiones 0.3 y posteriores se actualizan con el mismo identificador y firma.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
@@ -74,4 +83,5 @@ jobs:
           path: |
             app/build/reports/lint-results-*.html
             app/build/reports/tests/
+            app/schemas/
           if-no-files-found: ignore

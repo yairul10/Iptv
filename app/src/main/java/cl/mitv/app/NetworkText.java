@@ -10,8 +10,10 @@ import java.nio.charset.StandardCharsets;
 final class NetworkText {
     static String get(String address, int maxBytes) throws IOException {
         URL url = new URL(address);
+        final boolean secure="https".equals(url.getProtocol());
         for(int redirect = 0; redirect < 6; redirect++) {
-            if(!"https".equals(url.getProtocol())) throw new IOException("HTTPS required");
+            if(!"https".equals(url.getProtocol())&&!"http".equals(url.getProtocol())) throw new IOException("HTTP/HTTPS required");
+            if(secure&&!"https".equals(url.getProtocol())) throw new IOException("Insecure redirect");
             HttpURLConnection c = (HttpURLConnection)url.openConnection();
             c.setConnectTimeout(10000); c.setReadTimeout(15000); c.setInstanceFollowRedirects(false);
             c.setRequestProperty("User-Agent","MiTV-Android"); c.setUseCaches(false);

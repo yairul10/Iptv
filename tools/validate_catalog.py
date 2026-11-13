@@ -34,3 +34,9 @@ with tempfile.TemporaryDirectory() as output:
     subprocess.run(['java', '-cp', output, 'cl.mitv.app.CatalogNavigationTest'], check=True)
 assert 'c9' in ids, 'Keep Canal 9 and its existing favorite key'
 print(f'Catalogue: {len(items)} unique channels; all configured URLs accepted by navigation policy')
+
+remote = json.loads((root / 'remote/catalog.json').read_text())
+assert remote.get('schemaVersion') == 1
+assert isinstance(remote.get('version'), int) and remote['version'] >= 1
+assert isinstance(remote.get('channels'), list) and isinstance(remote.get('movies'), list)
+print(f"Remote snapshot version {remote['version']}: valid envelope")

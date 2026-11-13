@@ -2,9 +2,9 @@ name: Revisar lista de canales
 on:
   push:
     branches: [main]
-    paths: [app/src/main/assets/channels.json]
+    paths: [app/src/main/assets/channels.json, remote/catalog.json]
   pull_request:
-    paths: [app/src/main/assets/channels.json]
+    paths: [app/src/main/assets/channels.json, remote/catalog.json]
 permissions:
   contents: read
 jobs:

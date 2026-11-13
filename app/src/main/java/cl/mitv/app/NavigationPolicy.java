@@ -52,4 +52,10 @@ final class NavigationPolicy {
         host = host.toLowerCase(java.util.Locale.ROOT);
         return host.equals(seed) || host.endsWith("." + seed);
     }
+    static boolean isChannelUrl(String url,String player,String site) {
+        if(isChannelHttps(url,player,site)) return true;
+        if(url==null || !url.toLowerCase(java.util.Locale.ROOT).startsWith("http://")) return false;
+        try { URI parsed=new URI(url); if(parsed.getUserInfo()!=null) return false; String host=parsed.getHost(); return host!=null && (host.equalsIgnoreCase(new URI(player).getHost())||host.equalsIgnoreCase(new URI(site).getHost())); }
+        catch(Exception e) { return false; }
+    }
 }
