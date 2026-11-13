@@ -354,7 +354,14 @@ public final class MainActivity extends Activity {
             nativePlayer=new ExoPlayer.Builder(this).setLoadControl(load).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(headers)).build();
             if(profile.qualityHeight>0) nativePlayer.setTrackSelectionParameters(nativePlayer.getTrackSelectionParameters().buildUpon().setMaxVideoSize(Integer.MAX_VALUE,profile.qualityHeight).build());
             nativePlayer.setAudioAttributes(new androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(),true);
-            PlayerView video=new PlayerView(this); video.setPlayer(nativePlayer);
+            PlayerView video=new PlayerView(this);
+            video.setPlayer(channel.movie?nativePlayer:new ChannelPlayer(nativePlayer,() -> switchChannel(-1),() -> switchChannel(1)));
+            if(!channel.movie) {
+                video.setShowPreviousButton(true); video.setShowNextButton(true);
+                View previous=video.findViewById(androidx.media3.ui.R.id.exo_prev),next=video.findViewById(androidx.media3.ui.R.id.exo_next);
+                if(previous!=null) previous.setContentDescription("Canal anterior");
+                if(next!=null) next.setContentDescription("Canal siguiente");
+            }
             playerLayout.addView(video,new LinearLayout.LayoutParams(-1,0,1));
             nativePlayer.addListener(new androidx.media3.common.Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) {
