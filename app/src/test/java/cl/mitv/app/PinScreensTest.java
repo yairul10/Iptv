@@ -16,7 +16,7 @@ public class PinScreensTest {
    for(Class<? extends Activity> type:new Class[]{CatalogManagerActivity.class,SettingsActivity.class}) {
     ActivityController<? extends Activity> screen=Robolectric.buildActivity(type).create();
     AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog(); assertNotNull(dialog); assertTrue(dialog.isShowing());
-    dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick(); assertTrue(screen.get().isFinishing()); screen.destroy();
+    dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick(); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); assertTrue(screen.get().isFinishing()); screen.destroy();
    }
   } finally { prefs.edit().clear().commit(); }
  }
