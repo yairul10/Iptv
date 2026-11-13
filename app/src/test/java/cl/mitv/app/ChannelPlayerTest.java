@@ -2,8 +2,12 @@ package cl.mitv.app;
 import androidx.media3.common.Player;
 import java.lang.reflect.Proxy;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 @androidx.annotation.OptIn(markerClass=androidx.media3.common.util.UnstableApi.class)
+@RunWith(RobolectricTestRunner.class) @Config(sdk=28,manifest=Config.NONE)
 public class ChannelPlayerTest {
  @Test public void arrowsChangeChannelEvenForSingleItemButSeekingKeepsItsMeaning() {
   final int[] previous={0},next={0},back={0},forward={0};
