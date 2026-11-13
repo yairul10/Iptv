@@ -61,7 +61,7 @@ final class AppUpdates {
                     }
                     if(!manual && (preferences.getLong("update_prompted",0)>=offered || !activity.getWindow().getDecorView().hasWindowFocus())) return;
                     preferences.edit().putLong("update_prompted",offered).apply();
-                    new AlertDialog.Builder(activity).setTitle("Mi TV " + version + " disponible")
+                    new AlertDialog.Builder(activity).setTitle("Popes TV " + version + " disponible")
                         .setMessage("Se descargará el APK desde GitHub. Ábrelo al terminar y elige Actualizar. Android te pedirá confirmar la instalación. Tus favoritos y resultados se conservan.")
                         .setPositiveButton("Descargar",(d,w) -> {
                             try { activity.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }
