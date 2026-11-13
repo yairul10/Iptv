@@ -183,16 +183,22 @@ public final class MainActivity extends Activity {
         homeScroll = new ScrollView(this); homeScroll.setFillViewport(true);
         LinearLayout page = column(); page.setPadding(dp(16),dp(20),dp(16),dp(20));
         homeScroll.addView(page); root.addView(homeScroll);
-        TextView heading = text("Popes TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
-        long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
-        page.addView(text(total + (showMovies ? " películas" : " canales") + " · Tu televisión, a un toque.",17,Color.LTGRAY));
-        addButton(page,button("Administrar / importar / exportar",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",showMovies))));
-        addButton(page,button(favoritesOnly ? "Ver todos los canales" : "Ver favoritos",() -> {
-            favoritesOnly = !favoritesOnly; homeScrollY = 0; focusedChannelId = ""; showHome();
-        }));
-        addButton(page,button(selecting ? "Cancelar selección" : "Seleccionar para eliminar",() -> {
-            if(deleting) return;
-            if(selecting) { selecting=false; selectedIds.clear(); showHome(); }
+        LinearLayout header = new LinearLayout(this); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout brand = column();
+        TextView heading = text("Popes TV",28,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); brand.addView(heading);
+        long total=0; for(CatalogItem item:channels) if(!item.movie) total++;
+        brand.addView(text(total + " canales · Elige qué ver",14,Color.LTGRAY));
+        header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        Button menu=button("⚙",this::showHomeOptions); menu.setTextSize(24); menu.setMinWidth(0); menu.setMinimumWidth(0);
+        menu.setContentDescription("Opciones y configuración");
+        header.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48))); page.addView(header);
+        LinearLayout browsing = new LinearLayout(this);
+        Button all=button(favoritesOnly?"Todos":"✓ Todos",() -> setFavoritesFilter(false));
+        Button favorites=button(favoritesOnly?"✓ Favoritos":"Favoritos",() -> setFavoritesFilter(true));
+        addControl(browsing,all); addControl(browsing,favorites);
+        LinearLayout.LayoutParams browseParams=new LinearLayout.LayoutParams(-1,-2); browseParams.setMargins(0,dp(16),0,dp(8)); page.addView(browsing,browseParams);
+        if(selecting) addButton(page,button("Cancelar selección",() -> { if(!deleting) { selecting=false; selectedIds.clear(); showHome(); } }));
+        if(selecting) { selecting=false; selectedIds.clear(); showHome(); }
             else PinGate.require(this,() -> { selecting=true; selectedIds.clear(); showHome(); },() -> { });
         }));
         if(selecting) {
@@ -219,8 +225,13 @@ public final class MainActivity extends Activity {
         searchInput=new EditText(this); searchInput.setSingleLine(true); searchInput.setTextColor(Color.WHITE); searchInput.setHintTextColor(Color.LTGRAY);
         searchInput.setHint(showMovies?"Buscar película por nombre":"Buscar canal por nombre"); searchInput.setContentDescription(searchInput.getHint());
         searchInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT); searchInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        searchRow.setBackground(background(CARD,Color.TRANSPARENT)); searchRow.setPadding(dp(12),dp(2),dp(4),dp(2));
+        searchInput.setBackgroundColor(Color.TRANSPARENT); searchInput.setTextSize(16);
         searchInput.setText(searchQuery); searchRow.addView(searchInput,new LinearLayout.LayoutParams(0,dp(56),1));
-        addControl(searchRow,button("Limpiar",() -> { searchInput.setText(""); searchInput.requestFocus(); })); page.addView(searchRow);
+        Button clearSearch=button("×",() -> { searchInput.setText(""); searchInput.requestFocus(); });
+        clearSearch.setTextSize(24); clearSearch.setMinWidth(0); clearSearch.setMinimumWidth(0); clearSearch.setContentDescription("Limpiar búsqueda");
+        searchRow.addView(clearSearch,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        LinearLayout.LayoutParams searchParams=new LinearLayout.LayoutParams(-1,-2); searchParams.setMargins(0,dp(12),0,dp(12)); page.addView(searchRow,searchParams);
         catalogRows=column(); page.addView(catalogRows);
         int count = 0; View focusTarget = null;
         for(CatalogItem channel : channels) {
@@ -260,19 +271,36 @@ public final class MainActivity extends Activity {
             public void onTextChanged(CharSequence value,int start,int before,int count) { searchQuery=value.toString(); filterSearchRows(); }
             public void afterTextChanged(Editable value) { }
         });
-        page.addView(text("Popes TV · "+BuildConfig.VERSION_NAME,13,Color.GRAY));
-        addButton(page,button("Ajustes",() -> startActivity(new Intent(this,SettingsActivity.class))));
-        addButton(page,button("Diagnóstico",() -> startActivity(new Intent(this,DiagnosticsActivity.class))));
-        addButton(page,button("Actualizar canales",() -> refreshCatalog(true)));
-        addButton(page,button("Buscar actualización de la app",() -> appUpdates.check(this,network)));
-        addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Popes TV")
-            .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Popes TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nLa lista se revisa por internet al abrir Popes TV. Actualizar canales permite revisarla de nuevo. Si no hay conexión, se conserva la última lista válida.\n\nBuscar actualización de la app descarga un APK compatible desde GitHub; Android confirma la instalación.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
-            .setPositiveButton("Entendido",null).show()));
         if(restoreSearchFocus) { searchInput.requestFocus(); searchInput.setSelection(Math.max(0,Math.min(searchCursor,searchInput.length()))); }
         else if(focusTarget!=null && focusTarget.isShown()) focusTarget.requestFocus();
         else searchInput.requestFocus();
         final ScrollView scroll = homeScroll;
         scroll.post(() -> scroll.scrollTo(0,homeScrollY));
+    }
+    private void setFavoritesFilter(boolean value) {
+        favoritesOnly=value; homeScrollY=0; focusedChannelId=""; showHome();
+    }
+    private void showHomeOptions() {
+        String[] options={"Agregar / editar / importar canales","Seleccionar canales para eliminar","Ajustes","Actualizar canales","Buscar actualización de la app","Diagnóstico","Ayuda"};
+        new AlertDialog.Builder(this).setTitle("Popes TV · "+BuildConfig.VERSION_NAME)
+            .setItems(options,(dialog,which) -> {
+                switch(which) {
+                    case 0: startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",false)); break;
+                    case 1:
+                        if(!deleting) PinGate.require(this,() -> { selecting=true; selectedIds.clear(); homeScrollY=0; showHome(); },() -> { });
+                        break;
+                    case 2: startActivity(new Intent(this,SettingsActivity.class)); break;
+                    case 3: refreshCatalog(true); break;
+                    case 4: appUpdates.check(this,network); break;
+                    case 5: startActivity(new Intent(this,DiagnosticsActivity.class)); break;
+                    case 6: showHelp(); break;
+                }
+            }).setNegativeButton("Cerrar",null).show();
+    }
+    private void showHelp() {
+        new AlertDialog.Builder(this).setTitle("Popes TV")
+            .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Popes TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nLa lista se revisa por internet al abrir Popes TV. Actualizar canales permite revisarla de nuevo. Si no hay conexión, se conserva la última lista válida.\n\nBuscar actualización de la app descarga un APK compatible desde GitHub; Android confirma la instalación.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
+            .setPositiveButton("Entendido",null).show();
     }
     private void refreshCatalog(boolean manual) {
         if(catalogLoading || !ready) return;
