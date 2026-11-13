@@ -29,8 +29,8 @@ public final class CatalogManagerActivity extends Activity {
   super.onCreate(state); PinGate.require(this,() -> initializeScreen(state));
  }
  private void initializeScreen(Bundle state) {
-  repo=CatalogRepository.get(this); movies=getIntent().getBooleanExtra("movies",false);
-  if(state!=null) { movies=state.getBoolean("movies"); importMovie=state.getBoolean("importMovie"); pendingExport=state.getString("export"); exportMime=state.getString("mime"); exportName=state.getString("filename"); }
+  repo=CatalogRepository.get(this); movies=false;
+  if(state!=null) { movies=false; importMovie=false; pendingExport=state.getString("export"); exportMime=state.getString("mime"); exportName=state.getString("filename"); }
   ScrollView scroll=new ScrollView(this); page=new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setPadding(24,20,24,20); page.setBackgroundColor(Color.rgb(11,18,32)); scroll.addView(page); setContentView(scroll);
   live=repo.observe(); observer=data -> { rows.clear(); if(data!=null) rows.addAll(data); if(ready) render(); }; live.observeForever(observer);
   repo.initialize((v,error) -> { if(isFinishing()||isDestroyed()) return; if(error!=null) { alert("No se pudo abrir la base", "Tus datos no se han borrado."); return; } ready=true; render(); });
@@ -41,7 +41,6 @@ public final class CatalogManagerActivity extends Activity {
   if(isFinishing()||isDestroyed()) return;
   page.removeAllViews(); label("Administrar catálogo",26);
   button(page,"Volver a Popes TV",this::finish);
-  button(page,movies?"Mostrar canales":"Mostrar películas",() -> { movies=!movies; render(); });
   button(page,movies?"Añadir película":"Añadir canal",() -> editor(null));
   button(page,"Importar: URL, archivo o pegado",this::importOptions);
   button(page,"Exportar y compartir",this::exportOptions);
