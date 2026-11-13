@@ -21,9 +21,9 @@ public final class DiagnosticsActivity extends Activity {
   Button back=new Button(this); back.setText("Volver"); page.addView(back); back.setOnClickListener(v -> finish());
   TextView output=new TextView(this); output.setTextColor(Color.LTGRAY); output.setTextSize(14); output.setTextIsSelectable(true);
   ScrollView scroll=new ScrollView(this); scroll.addView(output); page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1)); setContentView(page);
-  copy.setOnClickListener(v -> { ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE); clipboard.setPrimaryClip(ClipData.newPlainText("Diagnóstico Mi TV",text)); Toast.makeText(this,"Diagnóstico copiado.",Toast.LENGTH_SHORT).show(); });
+  copy.setOnClickListener(v -> { ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE); clipboard.setPrimaryClip(ClipData.newPlainText("Diagnóstico Popes TV",text)); Toast.makeText(this,"Diagnóstico copiado.",Toast.LENGTH_SHORT).show(); });
   live=AppDatabase.get(this).diagnostics().observe(); observer=events -> {
-   StringBuilder value=new StringBuilder("Mi TV "+versionName()+" · Diagnóstico local\nLas URLs y posibles credenciales se ocultan.\n\n");
+   StringBuilder value=new StringBuilder("Popes TV "+versionName()+" · Diagnóstico local\nLas URLs y posibles credenciales se ocultan.\n\n");
    SimpleDateFormat format=new SimpleDateFormat("dd/MM HH:mm:ss",Locale.getDefault());
    if(events==null||events.isEmpty()) value.append("Sin eventos.");
    else for(DiagnosticEvent event:events) value.append(format.format(new Date(event.timestamp))).append(" [").append(event.level).append(" / ").append(event.category).append("] ").append(event.message).append('\n');
