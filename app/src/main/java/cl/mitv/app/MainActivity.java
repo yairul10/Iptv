@@ -137,7 +137,7 @@ public final class MainActivity extends Activity {
             if(isFinishing() || isDestroyed()) return;
             if(error != null) {
                 new AlertDialog.Builder(this).setTitle("No se pudo abrir el catálogo")
-                    .setMessage("No se borraron tus datos. Cierra y vuelve a abrir Mi TV para reintentar.").setPositiveButton("Cerrar",(d,w) -> finish()).show();
+                    .setMessage("No se borraron tus datos. Cierra y vuelve a abrir Popes TV para reintentar.").setPositiveButton("Cerrar",(d,w) -> finish()).show();
                 return;
             }
             ready = true; showHome(); UrlHealthWorker.schedule(this); refreshCatalog(false); appUpdates.check(this,network,false);
@@ -182,7 +182,7 @@ public final class MainActivity extends Activity {
         homeScroll = new ScrollView(this); homeScroll.setFillViewport(true);
         LinearLayout page = column(); page.setPadding(dp(16),dp(20),dp(16),dp(20));
         homeScroll.addView(page); root.addView(homeScroll);
-        TextView heading = text("Mi TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
+        TextView heading = text("Popes TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
         long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
         page.addView(text(total + (showMovies ? " películas" : " canales") + " · Tu televisión, a un toque.",17,Color.LTGRAY));
         addButton(page,button(showMovies ? "Ver canales" : "Ver películas",() -> { selecting=false; selectedIds.clear(); showMovies=!showMovies; searchQuery=""; selectedCategory="Todos"; homeScrollY=0; showHome(); }));
@@ -260,14 +260,14 @@ public final class MainActivity extends Activity {
             public void onTextChanged(CharSequence value,int start,int before,int count) { searchQuery=value.toString(); filterSearchRows(); }
             public void afterTextChanged(Editable value) { }
         });
-        page.addView(text("Mi TV · "+BuildConfig.VERSION_NAME,13,Color.GRAY));
+        page.addView(text("Popes TV · "+BuildConfig.VERSION_NAME,13,Color.GRAY));
         addButton(page,button("Ajustes",() -> startActivity(new Intent(this,SettingsActivity.class))));
         addButton(page,button("Diagnóstico",() -> startActivity(new Intent(this,DiagnosticsActivity.class))));
         addButton(page,button("Gestionar películas",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",true))));
         addButton(page,button("Actualizar canales",() -> refreshCatalog(true)));
         addButton(page,button("Buscar actualización de la app",() -> appUpdates.check(this,network)));
-        addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Mi TV")
-            .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Mi TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nLa lista se revisa por internet al abrir Mi TV. Actualizar canales permite revisarla de nuevo. Si no hay conexión, se conserva la última lista válida.\n\nBuscar actualización de la app descarga un APK compatible desde GitHub; Android confirma la instalación.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
+        addButton(page,button("Ayuda",() -> new AlertDialog.Builder(this).setTitle("Popes TV")
+            .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Popes TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nLa lista se revisa por internet al abrir Popes TV. Actualizar canales permite revisarla de nuevo. Si no hay conexión, se conserva la última lista válida.\n\nBuscar actualización de la app descarga un APK compatible desde GitHub; Android confirma la instalación.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
             .setPositiveButton("Entendido",null).show()));
         if(restoreSearchFocus) { searchInput.requestFocus(); searchInput.setSelection(Math.max(0,Math.min(searchCursor,searchInput.length()))); }
         else if(focusTarget!=null && focusTarget.isShown()) focusTarget.requestFocus();
