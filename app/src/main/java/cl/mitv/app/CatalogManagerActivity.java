@@ -40,7 +40,7 @@ public final class CatalogManagerActivity extends Activity {
  private void render() {
   if(isFinishing()||isDestroyed()) return;
   page.removeAllViews(); label("Administrar catálogo",26);
-  button(page,"Volver a Mi TV",this::finish);
+  button(page,"Volver a Popes TV",this::finish);
   button(page,movies?"Mostrar canales":"Mostrar películas",() -> { movies=!movies; render(); });
   button(page,movies?"Añadir película":"Añadir canal",() -> editor(null));
   button(page,"Importar: URL, archivo o pegado",this::importOptions);
