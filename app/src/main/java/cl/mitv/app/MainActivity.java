@@ -28,6 +28,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
@@ -68,6 +69,7 @@ public final class MainActivity extends Activity {
     private CatalogItem currentChannel;
     private String selectedCategory = "Todos", focusedChannelId = "";
     private boolean favoritesOnly;
+    private String focusedAction="play";
     private ScrollView homeScroll;
     private int homeScrollY;
     private boolean playerSuspended;
@@ -80,6 +82,7 @@ public final class MainActivity extends Activity {
             favoritesOnly = state.getBoolean("favorites", false);
             showMovies = state.getBoolean("movies",false);
             focusedChannelId = state.getString("focus", "");
+            focusedAction = state.getString("focusAction","play");
             homeScrollY = state.getInt("scroll", 0);
         }
         root = new FrameLayout(this); root.setBackgroundColor(BG); setContentView(root);
@@ -120,6 +123,18 @@ public final class MainActivity extends Activity {
         b.setOnFocusChangeListener((v,focused) -> b.setBackground(background(focused ? Color.rgb(32,66,76) : CARD,focused ? MINT : Color.TRANSPARENT)));
         b.setOnClickListener(v -> action.run()); return b;
     }
+    private ImageButton catalogIcon(int drawable,String label,CatalogItem item,String action,Runnable click) {
+        ImageButton icon=new ImageButton(this); icon.setImageResource(drawable); icon.setContentDescription(label);
+        icon.setPadding(dp(13),dp(13),dp(13),dp(13)); icon.setFocusable(true);
+        icon.setImageTintList(android.content.res.ColorStateList.valueOf("favorite".equals(action)&&item.favorite?Color.rgb(255,210,100):MINT));
+        icon.setBackground(background(CARD,Color.TRANSPARENT));
+        icon.setOnFocusChangeListener((v,focused) -> {
+            icon.setBackground(background(focused?Color.rgb(32,66,76):CARD,focused?MINT:Color.TRANSPARENT));
+            if(focused) { focusedChannelId=item.id; focusedAction=action; }
+        });
+        icon.setOnClickListener(v -> { focusedAction=action; click.run(); });
+        return icon;
+    }
     private void addButton(LinearLayout parent, Button b) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,dp(6),0,dp(6)); parent.addView(b,p);
     }
@@ -127,7 +142,7 @@ public final class MainActivity extends Activity {
         stopPlayer(); root.removeAllViews();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         homeScroll = new ScrollView(this); homeScroll.setFillViewport(true);
-        LinearLayout page = column(); page.setPadding(dp(24),dp(24),dp(24),dp(24));
+        LinearLayout page = column(); page.setPadding(dp(16),dp(20),dp(16),dp(20));
         homeScroll.addView(page); root.addView(homeScroll);
         TextView heading = text("Mi TV",36,Color.WHITE); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
         long total=0; for(CatalogItem item:channels) if(item.movie==showMovies) total++;
@@ -148,36 +163,30 @@ public final class MainActivity extends Activity {
             });
             addControl(filterRow,filter);
         }
-        int count = 0; Button focusTarget = null;
+        int count = 0; View focusTarget = null;
         for(CatalogItem channel : channels) {
             if(channel.movie!=showMovies) continue;
             boolean favorite = channel.favorite;
             if((favoritesOnly && !favorite) || (!selectedCategory.equals("Todos") && !selectedCategory.equals(channel.category))) continue;
             count++;
-            LinearLayout card = column(); card.setPadding(dp(18),dp(12),dp(18),dp(12)); card.setBackground(background(CARD,Color.TRANSPARENT));
-            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1,-2); cp.setMargins(0,dp(12),0,dp(8)); page.addView(card,cp);
-            card.addView(text(channel.category.toUpperCase(java.util.Locale.ROOT),12,MINT));
-            TextView title = text(channel.name,25,Color.WHITE); title.setTypeface(null,Typeface.BOLD); card.addView(title);
-            card.addView(text(channel.description,15,Color.LTGRAY));
-            if("DOWN".equals(channel.health)) card.addView(text("URL caída · última comprobación",13,Color.rgb(255,170,130)));
-            else if("UP".equals(channel.health)) card.addView(text("URL accesible · no confirma reproducción",12,Color.GRAY));
-            int result = resultFor(channel);
-            card.addView(text("Prueba en este equipo: " + RESULTS[result],13,result == 1 ? MINT : Color.LTGRAY));
-            Button watch = button(channel.movie ? "Ver película" : "Ver en vivo",() -> {
-                rememberHome(channel); showPlayer(channel);
-            }); addButton(card,watch);
-            watch.setContentDescription("Ver en vivo " + channel.name);
-            if(focusTarget == null || channel.id.equals(focusedChannelId)) focusTarget = watch;
-            LinearLayout actions = new LinearLayout(this);
-            Button star = button(favorite ? "★ Favorito" : "☆ Favorito",() -> {
-                rememberHome(channel); repository.submit(() -> { repository.store.favorite(channel,!favorite); return null; },(v,e) -> { if(e!=null) Toast.makeText(this,"No se pudo guardar el favorito.",Toast.LENGTH_LONG).show(); });
-            }); star.setContentDescription((favorite ? "Quitar de favoritos " : "Agregar a favoritos ") + channel.name);
-            addControl(actions,star);
-            addControl(actions,button("Resultado",() -> markResult(channel,false)));
-            HorizontalScrollView actionsScroll = new HorizontalScrollView(this); actionsScroll.addView(actions); card.addView(actionsScroll);
+            LinearLayout row=new LinearLayout(this); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12),dp(5),dp(5),dp(5)); row.setMinimumHeight(dp(64)); row.setBackground(background(CARD,Color.TRANSPARENT));
+            LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2); rowParams.setMargins(0,dp(4),0,dp(4)); page.addView(row,rowParams);
+            TextView title=text(channel.name,18,Color.WHITE); title.setTypeface(null,Typeface.BOLD); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            row.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+            ImageButton play=catalogIcon(R.drawable.ic_play,"Reproducir "+channel.name,channel,"play",() -> { rememberHome(channel); showPlayer(channel); });
+            ImageButton star=catalogIcon(favorite?R.drawable.ic_star_filled:R.drawable.ic_star_outline,(favorite?"Quitar de favoritos ":"Añadir a favoritos ")+channel.name,channel,"favorite",() -> {
+                rememberHome(channel); repository.submit(() -> { repository.store.favorite(channel,!favorite); return null; },(v,e) -> {
+                    if(e!=null&&!isFinishing()&&!isDestroyed()) Toast.makeText(this,"No se pudo guardar el favorito.",Toast.LENGTH_LONG).show();
+                });
+            });
+            LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(dp(52),dp(52)); actionParams.setMargins(dp(4),0,0,0); row.addView(play,actionParams);
+            LinearLayout.LayoutParams favoriteParams=new LinearLayout.LayoutParams(dp(52),dp(52)); favoriteParams.setMargins(dp(4),0,0,0); row.addView(star,favoriteParams);
+            if(focusTarget==null) focusTarget=play;
+            if(channel.id.equals(focusedChannelId)) focusTarget="favorite".equals(focusedAction)?star:play;
         }
         if(count == 0) page.addView(text("No hay canales en este filtro. Prueba otra categoría o vuelve a todos los canales.",18,Color.LTGRAY));
-        page.addView(text("Mi TV · 0.5.0",13,Color.GRAY));
+        page.addView(text("Mi TV · 0.5.1",13,Color.GRAY));
         addButton(page,button("Ajustes",() -> startActivity(new Intent(this,SettingsActivity.class))));
         addButton(page,button("Diagnóstico",() -> startActivity(new Intent(this,DiagnosticsActivity.class))));
         addButton(page,button("Gestionar películas",() -> startActivity(new Intent(this,CatalogManagerActivity.class).putExtra("movies",true))));
@@ -364,7 +373,7 @@ public final class MainActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         state.putBoolean("movies",showMovies); state.putString("category",selectedCategory); state.putBoolean("favorites",favoritesOnly);
-        state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
+        state.putString("focusAction",focusedAction); state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
     }
     @Override protected void onPause() {
         sleepHandler.removeCallbacks(sleepTask);

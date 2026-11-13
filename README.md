@@ -172,3 +172,7 @@ Los ajustes se guardan localmente, fuera de los catálogos importables/exportabl
 La comprobación de versión usa el JSON remoto de la última Release del repositorio. Hay un botón manual y una comprobación silenciosa al abrir, como máximo una vez al día después de un resultado válido. Una versión compatible superior muestra el aviso con enlace de descarga; el aviso automático se presenta una vez por versión. Se siguen validando versión, paquete, certificado y origen del APK; Android confirma la instalación. Un fallo automático queda en diagnóstico sin interrumpir al usuario.
 
 La tabla `movies` ya utiliza el mismo patrón `groupId`/`resolverId` de canales. **Gestionar películas** abre directamente su pantalla de CRUD, manteniendo importación, exportación, reproducción, estado de salud y protección frente a sincronización remota.
+
+## Lista compacta (0.5.1)
+
+Canales y películas se muestran en filas con el nombre y dos iconos: reproducir y favorito. Las acciones conservan etiquetas de accesibilidad, áreas de 52 dp y foco visible para el control remoto. Descripciones, categorías repetidas y resultados no ocupan cada fila; filtros y administración se mantienen. El resultado manual sigue disponible en el reproductor.

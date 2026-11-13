@@ -71,8 +71,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.5.0-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.5.0 (${GITHUB_RUN_NUMBER})" --notes 'Diagnóstico local de 200 eventos, ajustes de User-Agent/Referer, calidad y buffer de video directo, PIN de administración, temporizador y avisos de versión. Se conserva la gestión de películas y el catálogo Room. Desde la firma fija se actualiza conservando datos; las versiones iniciales 0.1/0.2 requieren reinstalar una última vez.' --latest
+          tag="v0.5.1-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.5.1 (${GITHUB_RUN_NUMBER})" --notes 'Lista compacta de canales y películas con iconos de reproducir y favorito. Se conservan catálogo, favoritos, filtros y ajustes. Instala el APK como actualización sobre 0.5.0.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
