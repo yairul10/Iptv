@@ -18,6 +18,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Validar catálogo y navegación
+        run: python3 tools/validate_catalog.py
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools

@@ -1,0 +1,13 @@
+[
+  {"id":"c9","name":"Canal 9 Bío Bío","category":"Regionales","description":"Noticias y programas del Biobío","playerUrl":"https://rudo.video/live/c9","siteUrl":"https://www.canal9.cl/","directPlayer":true},
+  {"id":"tvu","name":"TVU","category":"Regionales","description":"Televisión Universidad de Concepción","playerUrl":"https://rudo.video/live/tvu/volume/0","siteUrl":"https://www.tvu.cl/","directPlayer":true},
+  {"id":"tvn","name":"TVN","category":"Nacionales","description":"Televisión Nacional de Chile","playerUrl":"https://www.tvn.cl/en-vivo","siteUrl":"https://www.tvn.cl/en-vivo","directPlayer":false},
+  {"id":"chv","name":"Chilevisión","category":"Nacionales","description":"Programas, noticias y entretención","playerUrl":"https://www.chilevision.cl/senal-online/","siteUrl":"https://www.chilevision.cl/senal-online/","directPlayer":false},
+  {"id":"mega","name":"Mega","category":"Nacionales","description":"Programación de la señal oficial","playerUrl":"https://www.mega.cl/senal-en-vivo/","siteUrl":"https://www.mega.cl/senal-en-vivo/","directPlayer":false},
+  {"id":"13","name":"Canal 13","category":"Nacionales","description":"Programas y entretención","playerUrl":"https://www.13.cl/en-vivo","siteUrl":"https://www.13.cl/en-vivo","directPlayer":false},
+  {"id":"tvmas","name":"TV+","category":"Nacionales","description":"Entretención y conversación","playerUrl":"https://rudo.video/live/tvmas","siteUrl":"https://tvmas.tv/page/en-vivo","directPlayer":true},
+  {"id":"24play","name":"24 Play","category":"Noticias","description":"Señal informativa digital de TVN","playerUrl":"https://www.tvn.cl/senal-24play","siteUrl":"https://www.tvn.cl/senal-24play","directPlayer":false},
+  {"id":"t13","name":"T13 En Vivo","category":"Noticias","description":"Actualidad y noticias de Teletrece","playerUrl":"https://www.t13.cl/en-vivo","siteUrl":"https://www.t13.cl/en-vivo","directPlayer":false},
+  {"id":"meganoticias","name":"Meganoticias Ahora","category":"Noticias","description":"Noticias en la señal oficial de Mega","playerUrl":"https://www.mega.cl/senal-en-vivo/meganoticias/","siteUrl":"https://www.mega.cl/senal-en-vivo/meganoticias/","directPlayer":false},
+  {"id":"ntv","name":"NTV","category":"Infantil y cultura","description":"Contenidos infantiles, familiares y culturales","playerUrl":"https://www.tvn.cl/senal-ntv","siteUrl":"https://www.tvn.cl/senal-ntv","directPlayer":false}
+]

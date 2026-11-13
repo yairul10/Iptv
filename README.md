@@ -1,6 +1,6 @@
 # Mi TV
 
-Primera prueba personal para celular Android y TV Box (Android 6 o superior), diseñada para comprobar Canal 9 Bío Bío en un TX1 con Android 10.
+Versión 0.2.0 para celular Android y TV Box (Android 6 o superior). Catálogo inicial de 11 canales para probar en un TX1 con Android 10. Canal 9 fue confirmado por el usuario en su celular con la versión 0.1.0; los demás canales y el TV Box están pendientes de prueba física.
 
 ## Descargar e instalar
 
@@ -12,17 +12,38 @@ Primera prueba personal para celular Android y TV Box (Android 6 o superior), di
 
 Se compila automáticamente al actualizar `main`. También puedes pulsar **Run workflow** desde Actions. Si GitHub solicita habilitar Actions, acepta para este repositorio.
 
-## Qué incluye
+## Canales incluidos
 
-- Canal 9 usando `https://rudo.video/live/c9`, el reproductor que enlaza el [sitio oficial](https://www.canal9.cl/).
-- Favorito guardado en el dispositivo, lista de favoritos, recarga y acceso al sitio oficial.
-- Botones con foco visible, navegación con flechas/OK y soporte táctil.
-- Vista amplia y pantalla completa de videos HTML, cuando el reproductor la ofrece.
-- Sin cuentas, servidor propio, extracción de enlaces de video ni retransmisión.
+| Canal | Acceso dentro de Mi TV | Fuente oficial |
+| --- | --- | --- |
+| Canal 9 Bío Bío | Reproductor web enlazado por el canal | https://www.canal9.cl/ |
+| TVU | Reproductor web enlazado por el canal | https://www.tvu.cl/ |
+| TV+ | Reproductor web enlazado por el canal | https://tvmas.tv/page/en-vivo |
+| TVN | Página de señal oficial | https://www.tvn.cl/en-vivo |
+| Chilevisión | Página de señal oficial | https://www.chilevision.cl/senal-online/ |
+| Mega | Página de señal oficial | https://www.mega.cl/senal-en-vivo/ |
+| Canal 13 | Página de señal oficial | https://www.13.cl/en-vivo |
+| 24 Play | Página de señal digital oficial (no se presenta como Canal 24 Horas de pago) | https://www.tvn.cl/senal-24play |
+| T13 En Vivo | Página de señal oficial | https://www.t13.cl/en-vivo |
+| Meganoticias Ahora | Página de señal oficial | https://www.mega.cl/senal-en-vivo/meganoticias/ |
+| NTV | Página de señal oficial | https://www.tvn.cl/senal-ntv |
 
-**Esto es una prueba de acceso al reproductor web oficial, no un reproductor IPTV nativo.** No se ha verificado todavía la reproducción en el TX1 ni en un teléfono físico. No se afirma tener autorización para redistribuir la señal. No se eliminan anuncios ni restricciones del proveedor. El enlace oficial podría cambiar o restringir WebView.
+Las fuentes se revisaron el 12 de noviembre de 2026 (Chile). Una página accesible no confirma reproducción, disponibilidad de todos los programas ni compatibilidad con TV Box. Puede pedir cookies, Play, activación de sonido o aplicar restricciones del proveedor. No se saltan pagos, bloqueos ni anuncios.
 
-En el reproductor pulsa Play si lo pide. El botón Play/pausa controla video HTML en la página principal; si el proveedor cambia a un iframe puede requerir usar sus propios controles. MENU del control alterna la vista amplia; Atrás restaura los controles y luego vuelve a los canales. Algunas versiones antiguas de WebView pueden requerir actualización desde la tienda del equipo. La navegación dentro del reproductor depende del proveedor.
+## Uso y pruebas
+
+- Categorías: todos, regionales, nacionales, noticias e infantil/cultura; combinables con favoritos.
+- Favoritos independientes por canal; el favorito de Canal 9 de la versión anterior se conserva al actualizar con la misma firma.
+- **Resultado** permite marcar cada canal como Pendiente, Funciona o No funciona. Se guarda solo en ese dispositivo: los resultados del celular no se confunden con los del TV Box.
+- Flechas y OK para navegar; en páginas completas se conservan sus propios controles. En los reproductores de Canal 9, TVU y TV+, OK intenta alternar Play/pausa cuando el foco está en el video.
+- **Ampliar vista** oculta los botones de Mi TV; Atrás los recupera. Usa el botón de pantalla completa del propio reproductor para ampliar solo el video. MENU también alterna la vista.
+- **Recargar** vuelve a la señal inicial del canal; **Página oficial** abre el navegador externo como alternativa.
+- Al salir a otra aplicación se detiene el reproductor y se vuelve a cargar al regresar, para evitar audio oculto de reproductores insertados.
+- Si una página falla, comprueba internet, actualiza Android System WebView si tu equipo lo permite y prueba en el navegador.
+
+La aplicación usa páginas y reproductores web oficiales, no un reproductor IPTV nativo. No está afiliada a los canales, no extrae enlaces de transmisión, no retransmite señales y no afirma autorización de redistribución. La navegación de cada página con el control remoto depende de su diseño. No se ha verificado físicamente la nueva versión.
+
+El catálogo editable está en `app/src/main/assets/channels.json`. Sus cambios se incluyen en cada APK; esta versión no descarga automáticamente un catálogo remoto. Cada canal tiene una clave estable para conservar su favorito y su resultado.
 
 ## Firma y actualizaciones
 
@@ -41,4 +62,8 @@ Con esos cuatro secretos se genera una versión personal de release (`cl.mitv.ap
 
 Java 17, Android SDK 35, Android Gradle Plugin 8.9.2, Gradle 8.11.1. Abre el proyecto en Android Studio o instala esa versión de Gradle y ejecuta `gradle lintDebug assembleDebug`. No se incluye Gradle Wrapper; Actions instala una versión fijada de Gradle.
 
-La app solo solicita acceso a internet y conserva el favorito localmente. El reproductor oficial y el navegador pueden usar cookies y servicios de terceros conforme a sus propias políticas.
+La app solo solicita acceso a internet. Favoritos y resultados se guardan localmente. Las páginas oficiales, sus reproductores y el navegador pueden usar cookies y servicios de terceros conforme a sus políticas; se permiten cookies de terceros en WebView para sus proveedores de video. No se agrega un servicio propio de analítica.
+
+## Validación
+
+`python3 tools/validate_catalog.py` verifica claves únicas, categorías, URLs del catálogo y la política Java de navegación, incluidos dominios falsos y esquemas no permitidos. GitHub Actions ejecuta esa validación, Android Lint, compilación y verificación de firma del APK. Esto no sustituye las pruebas de imagen, sonido y control remoto en los equipos.
