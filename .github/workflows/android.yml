@@ -71,8 +71,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.6.6-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.6.6 (${GITHUB_RUN_NUMBER})" --notes 'Quita la barra inferior CH−/CH+ para dar más espacio al video. El cambio de canal sigue disponible con las flechas del reproductor y las teclas de canal del control remoto.' --latest
+          tag="v0.6.7-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.6.7 (${GITHUB_RUN_NUMBER})" --notes 'En TV Box la barra superior se oculta tras 6 segundos sin usar el control. Atrás o Menú recuperan los botones. Conserva el cambio de canal y el comportamiento del celular.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
