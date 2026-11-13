@@ -6,7 +6,7 @@ import java.util.List;
 public interface CatalogDao {
  String CHANNELS = "SELECT c.id,c.name,c.description,g.name AS category,c.groupId,c.resolverId,r.sourceUrl AS playerUrl,r.siteUrl,r.mode,r.health,r.checkedAt,0 AS movie,(r.mode='OFFICIAL_PLAYER') AS directPlayer,c.favorite,c.testResult,c.localEdited,c.sortOrder FROM channels c JOIN `groups` g ON c.groupId=g.id JOIN resolvers r ON c.resolverId=r.id WHERE c.deleted=0 AND c.enabled=1";
  String MOVIES = "SELECT c.id,c.name,c.description,g.name AS category,c.groupId,c.resolverId,r.sourceUrl AS playerUrl,r.siteUrl,r.mode,r.health,r.checkedAt,1 AS movie,(r.mode='OFFICIAL_PLAYER') AS directPlayer,c.favorite,c.testResult,c.localEdited,c.sortOrder FROM movies c JOIN `groups` g ON c.groupId=g.id JOIN resolvers r ON c.resolverId=r.id WHERE c.deleted=0 AND c.enabled=1";
- String ALL = CHANNELS + " UNION ALL " + MOVIES + " ORDER BY sortOrder,name COLLATE NOCASE";
+ String ALL = "SELECT * FROM (" + CHANNELS + " UNION ALL " + MOVIES + ") ORDER BY sortOrder,name COLLATE NOCASE";
  @Query(ALL) LiveData<List<CatalogItem>> observeCatalog();
  @Query(ALL) List<CatalogItem> catalog();
  @Query("SELECT * FROM `groups` ORDER BY sortOrder,name COLLATE NOCASE") List<GroupEntity> groups();

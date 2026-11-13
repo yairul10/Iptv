@@ -1,6 +1,6 @@
 # Mi TV
 
-Versión 0.3.0 para celular Android y TV Box (Android 6 o superior). Catálogo inicial de 11 canales para probar en un TX1 con Android 10. Canal 9 fue confirmado por el usuario en su celular con la versión 0.1.0; los demás canales y el TV Box están pendientes de prueba física.
+Versión 0.4.0 para celular Android y TV Box (Android 6 o superior). Catálogo inicial de 11 canales para probar en un TX1 con Android 10. Canal 9 fue confirmado por el usuario en su celular con la versión 0.1.0; los demás canales y el TV Box están pendientes de prueba física.
 
 ## Descargar e instalar
 
@@ -49,11 +49,7 @@ La aplicación usa páginas y reproductores web oficiales, no un reproductor IPT
 
 ## Actualizar canales sin reinstalar
 
-El catálogo editable está en `app/src/main/assets/channels.json`. Mi TV consulta su versión pública en GitHub al abrir la app; también se puede pulsar **Actualizar canales**. GitHub puede tardar unos minutos en servir un cambio reciente.
-
-Cada catálogo se valida completo antes de reemplazar la copia local. Si no hay internet o el JSON es inválido, se conserva la última lista válida; al instalar por primera vez se usa la lista incluida en el APK. Las claves de canal son estables para conservar favoritos y resultados. Las categorías y los dominios iniciales de cada canal se leen del catálogo, por lo que añadir otra categoría o un canal con otro dominio HTTPS no exige un APK nuevo. Los cambios no cierran una señal que se está reproduciendo.
-
-Los cambios que afecten únicamente al catálogo ejecutan su validación en Actions y no generan otro APK. No se configura un servidor de pago. El catálogo y los enlaces publicados son públicos: no incluyas credenciales ni enlaces privados.
+La versión 0.4.0 utiliza Room y un catálogo remoto versionado en `remote/catalog.json`. El asset se utiliza solo para la primera siembra. Más abajo se detalla cómo importar, editar, exportar y sincronizar sin perder las modificaciones locales.
 
 ## Firma fija y respaldo privado
 
@@ -74,8 +70,82 @@ Android debe confirmar cada instalación. Mi TV ofrece el APK desde la Release o
 
 Java 17, Android SDK 35, Android Gradle Plugin 8.9.2, Gradle 8.11.1. Abre el proyecto en Android Studio o instala esa versión de Gradle y ejecuta `gradle testDebugUnitTest lintDebug assembleDebug`. No se incluye Gradle Wrapper; Actions instala una versión fijada de Gradle.
 
-La app solo solicita acceso a internet. Favoritos y resultados se guardan localmente. Las páginas oficiales, sus reproductores y el navegador pueden usar cookies y servicios de terceros conforme a sus políticas; se permiten cookies de terceros en WebView para sus proveedores de video. No se agrega un servicio propio de analítica.
+La app usa internet y los permisos estándar de WorkManager para los trabajos programados. Favoritos, resultados y catálogo se guardan localmente en Room. Las páginas oficiales, sus reproductores y el navegador pueden usar cookies y servicios de terceros conforme a sus políticas; se permiten cookies de terceros en WebView para sus proveedores de video. No se agrega un servicio propio de analítica.
 
 ## Validación
 
 `python3 tools/validate_catalog.py` verifica claves únicas, categorías, URLs del catálogo y la política Java de navegación, incluidos dominios falsos y esquemas no permitidos. GitHub Actions ejecuta esa validación, pruebas de rechazo de catálogos incompletos o maliciosos, Android Lint y compilación. Cuando hay un secreto de firma válido también verifica la firma y publica el APK junto a sus metadatos de actualización. Esto no sustituye las pruebas de imagen, sonido y control remoto en los equipos.
+
+## Catálogo local con Room (0.4.0)
+
+Room es la fuente de datos de ambas pantallas: canales y películas. La UI observa una consulta de la base que une entradas, grupos y resolvers. Favoritos, resultados manuales y salud de URLs también se guardan en Room. La base `mitv-catalog.db` tiene estas tablas:
+
+| Tabla | Contenido |
+| --- | --- |
+| `channels` | Canales, grupo, resolver, origen remoto, edición local, favorito y resultado |
+| `movies` | Películas con las mismas relaciones y estado local |
+| `groups` | Grupos seleccionables y creados desde el editor |
+| `resolvers` | URL, página de origen, modo de reproducción y última salud de la URL |
+| `metadata` | Siembra completada, fuente remota y versión aplicada por fuente |
+
+`assets/channels.json` se lee exclusivamente dentro de la transacción de primera inicialización. Si la base está inicializada, no se abre ese asset otra vez, aunque todos los canales hayan sido eliminados. Un error de siembra revierte la transacción y permite reintentar. En la migración inicial también se recupera el antiguo `catalog_json` válido y los favoritos/resultados de SharedPreferences; después la UI no consulta esas preferencias. No hay recreación destructiva de la base. El esquema de Room se exporta en `app/schemas`.
+
+Las películas empiezan vacías: no se añaden títulos ni fuentes de video sin que el usuario los importe o cree.
+
+## Administrar, importar y exportar
+
+Desde **Administrar / importar / exportar**:
+
+- Crea, edita y elimina canales o películas. Elige un grupo existente o crea uno. Los modos son **Página web**, **Reproductor web** y **Video directo (HLS / MP4)**. Este último utiliza Media3; una página HTML no funciona como URL de video directo.
+- Importa una lista por URL HTTP/HTTPS, archivo mediante el selector Android o texto pegado. Se aceptan M3U extendido (`#EXTM3U`), el JSON antiguo de canales y el formato JSON completo descrito debajo. Límite: 1 MB y 2000 entradas por importación.
+- Antes de confirmar, se muestran canales/películas válidos, grupos, entradas nuevas, existentes, duplicados y errores. La validación y el resumen no escriben en la base. Al confirmar se guarda todo lo válido en una transacción; lo no incluido no se elimina. Las coincidencias se actualizan como ediciones locales. Cancelar no aplica cambios.
+- En M3U el tipo por defecto es la sección desde la que se importa. Se leen `tvg-id`, `group-title`, `#EXTGRP` y las extensiones `x-mitv-kind`, `x-mitv-mode`, `x-mitv-site`. Sin modo explícito se utiliza video directo. Cabeceras personalizadas, DRM y directivas de Kodi/VLC no se ejecutan.
+- Exporta el catálogo visible completo (canales y películas, excluidas eliminaciones) a JSON o M3U. Puedes **Guardar archivo** mediante Android o **Compartir con otra app** usando el selector del sistema. FileProvider comparte exclusivamente la carpeta temporal `exports`, con acceso de lectura al archivo elegido. No se solicita acceso general al almacenamiento.
+
+El JSON mantiene grupos, resolvers, IDs y modos. M3U conserva los modos y tipo con atributos `x-mitv-*`; otros reproductores que no conocen esas extensiones solo podrán reproducir entradas que realmente apunten a un stream. Los enlaces de páginas web no se convierten en señales de video por exportarlos. Las exportaciones contienen las URLs que se hayan guardado, incluidas posibles claves de acceso del proveedor.
+
+## Formato JSON completo
+
+```json
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "groups": [{"id": "regionales", "name": "Regionales"}],
+  "resolvers": [{
+    "id": "c9-player",
+    "mode": "OFFICIAL_PLAYER",
+    "url": "https://rudo.video/live/c9",
+    "siteUrl": "https://www.canal9.cl/"
+  }],
+  "channels": [{
+    "id": "c9",
+    "name": "Canal 9 Bío Bío",
+    "description": "Noticias y programas del Biobío",
+    "groupId": "regionales",
+    "resolverId": "c9-player"
+  }],
+  "movies": []
+}
+```
+
+Se admiten también campos directos en cada entrada (`group`, `mode`, `url`, `siteUrl`) o los campos del JSON antiguo (`category`, `playerUrl`, `directPlayer`). `movies` usa el mismo formato que `channels`. IDs estables permiten actualizar una entrada existente. Las URLs aceptadas son HTTP/HTTPS sin usuario ni contraseña incrustados; no se ejecutan esquemas `file:`, `javascript:` o `intent:`.
+
+## Sincronización versionada y protección local
+
+La fuente por defecto es `remote/catalog.json`, separada del asset inicial. Se puede configurar otra URL HTTPS desde Administrar. Debe ofrecer JSON completo con `version` entero positivo creciente. Mi TV sincroniza al abrir y también bajo petición. El snapshot se valida antes de la transacción; una misma versión no se aplica otra vez y una inferior se rechaza. No se aplica un snapshot con errores o IDs duplicados.
+
+La versión y el último catálogo aplicado quedan en Room, por fuente. Un fallo de red deja esa copia intacta. La sincronización actualiza únicamente entradas de su propia fuente que no fueron editadas localmente; favoritos y resultados se conservan. Las ediciones y eliminaciones locales quedan protegidas. Una eliminación crea una marca local para evitar que el servidor resucite la entrada. Las entradas remotas ausentes en una versión nueva dejan de mostrarse si no tienen cambios locales; las entradas de otras fuentes y las creadas/importadas localmente permanecen.
+
+Para publicar cambios remotos, modifica `remote/catalog.json`, incrementa `version` y conserva los IDs. Esto no exige otro APK. `assets/channels.json` solo cambia la siembra de instalaciones nuevas.
+
+## Salud de URLs con WorkManager
+
+Se registra un trabajo periódico único cada 12 horas, con conexión y batería suficiente. Android puede retrasarlo por ahorro de energía. También se puede encolar una comprobación manual desde Administrar.
+
+Cada ejecución comprueba hasta 50 resolvers, priorizando los menos recientes, con un máximo de cuatro peticiones simultáneas y un tiempo total acotado. Utiliza HEAD; si el servidor devuelve 405/501, intenta GET con `Range: bytes=0-0`, sin descargar el video. Las respuestas 2xx indican URL accesible, 404/410 marcan caída y otros fallos transitorios requieren tres comprobaciones fallidas consecutivas. 401/403/429 se dejan sin confirmar para no confundir autenticación, protección o límite de peticiones con una señal caída. Editar la URL o el modo reinicia su estado de salud. La comprobación guarda el resultado solo si la URL no fue cambiada durante la petición.
+
+Una página accesible no prueba que el video funcione. El marcado no elimina entradas ni bloquea su reproducción. Catálogos de más de 50 resolvers se revisan por lotes en ejecuciones sucesivas.
+
+## Pruebas de la migración
+
+Se incluyen pruebas de Room con SQLite bajo Robolectric para siembra única, reapertura, migración de preferencias, cancelación de importación, protección de ediciones/eliminaciones, versiones remotas y CRUD de películas. También se prueban la importación/exportación M3U/JSON, validación y las comprobaciones HEAD/GET con un servidor local de pruebas. GitHub ejecuta estas pruebas y Android Lint antes de publicar un APK.
