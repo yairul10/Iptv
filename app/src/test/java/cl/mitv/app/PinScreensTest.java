@@ -27,6 +27,7 @@ public class PinScreensTest {
   try {
    PinGate.require(screen.get(),() -> allowed[0]=true,() -> canceled[0]=true);
    AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog(); dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
+   org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
    assertTrue(canceled[0]); assertFalse(allowed[0]); assertFalse(screen.get().isFinishing());
   } finally { screen.destroy(); prefs.edit().clear().commit(); }
  }
