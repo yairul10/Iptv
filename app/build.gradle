@@ -3,7 +3,7 @@ android {
     namespace 'cl.mitv.app'
     compileSdk 35
     defaultConfig {
-        applicationId 'cl.mitv.app'
+        applicationId 'cl.mitv.app.preview'
         minSdk 23
         targetSdk 35
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
@@ -21,7 +21,7 @@ android {
         }
         buildTypes { release { signingConfig signingConfigs.personal } }
     }
-    buildTypes { debug { applicationIdSuffix '.preview'; versionNameSuffix '-prueba' } }
+    buildTypes { debug { versionNameSuffix '-desarrollo' } }
 }
 
 dependencies {

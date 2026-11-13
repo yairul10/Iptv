@@ -180,7 +180,6 @@ public final class MainActivity extends Activity {
                     channels.clear(); channels.addAll(fresh);
                     if(web == null && changed) {
                         if(homeScroll != null) homeScrollY = homeScroll.getScrollY();
-                        // Avoid discarding remote-control focus during an automatic refresh.
                         showHome();
                     }
                     if(manual) Toast.makeText(this,"Lista actualizada: " + fresh.size() + " canales.",Toast.LENGTH_LONG).show();

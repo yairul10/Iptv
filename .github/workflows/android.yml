@@ -34,63 +34,38 @@ jobs:
           gradle-version: '8.11.1'
       - name: Instalar SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Recuperar firma anterior
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: mitv-preview-signing-v1
-      - name: Restaurar firma fija y comprobar identidad
+      - name: Preparar firma fija privada
         env:
-          PREVIEW_KEYSTORE_BASE64: ${{ secrets.PREVIEW_KEYSTORE_BASE64 }}
-        run: |
-          mkdir -p "$HOME/.android"
-          if [ -n "$PREVIEW_KEYSTORE_BASE64" ]; then
-            printf '%s' "$PREVIEW_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
-          fi
-          if [ ! -s "$HOME/.android/debug.keystore" ]; then
-            echo '::error::Falta la firma original. Restaura PREVIEW_KEYSTORE_BASE64. No se generará una clave diferente.'
-            exit 1
-          fi
-          keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -file "$RUNNER_TEMP/signer.der"
-          signer=$(sha256sum "$RUNNER_TEMP/signer.der" | cut -d ' ' -f 1)
-          if [ -f config/signing-sha256.txt ] && [ "$signer" != "$(tr -d '\n\r ' < config/signing-sha256.txt)" ]; then
-            echo '::error::La firma no coincide con la instalación original.'
-            exit 1
-          fi
-          echo "SIGNER_SHA256=$signer" >> "$GITHUB_ENV"
-      - name: Crear respaldo cifrado de firma
-        run: |
-          mkdir -p "$RUNNER_TEMP/signing-recovery"
-          openssl cms -encrypt -binary -aes-256-cbc -in "$HOME/.android/debug.keystore" -out "$RUNNER_TEMP/signing-recovery/signing-backup.p7m" -outform DER config/recovery-certificate.pem
-          printf '%s\n' "$SIGNER_SHA256" > "$RUNNER_TEMP/signing-recovery/signing-sha256.txt"
-      - name: Guardar respaldo cifrado
-        uses: actions/upload-artifact@v4
-        with:
-          name: firma-cifrada
-          path: ${{ runner.temp }}/signing-recovery/
-          retention-days: 30
+          MITV_SIGNING_BUNDLE: ${{ secrets.MITV_SIGNING_BUNDLE }}
+        run: python3 tools/prepare_signing.py
       - name: Compilar, probar y revisar
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+          gradle --no-daemon testReleaseUnitTest lintRelease assembleRelease
+          if [ "$KEYSTORE_AVAILABLE" != "true" ]; then
+            echo "Pruebas completas. Falta guardar MITV_SIGNING_BUNDLE para publicar el APK instalable." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           mkdir -p entrega
-          cp app/build/outputs/apk/debug/app-debug.apk entrega/Mi-TV.apk
+          cp app/build/outputs/apk/release/app-release.apk entrega/Mi-TV.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose entrega/Mi-TV.apk
           sha256sum entrega/Mi-TV.apk > entrega/SHA256.txt
           python3 tools/release_manifest.py
       - name: Descargar APK
+        if: env.KEYSTORE_AVAILABLE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Mi-TV-APK
           path: entrega/
           retention-days: 30
       - name: Publicar actualización descargable
+        if: env.KEYSTORE_AVAILABLE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v0.3.0-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.3.0 (${GITHUB_RUN_NUMBER})" --notes 'Lista de canales actualizable por internet y búsqueda de actualizaciones compatibles. Descarga Mi-TV.apk y elige Actualizar, sin desinstalar.' --latest
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.3.0 (${GITHUB_RUN_NUMBER})" --notes 'Mi TV con firma fija, catálogo remoto y búsqueda de actualizaciones. La migración desde 0.1/0.2 requiere reinstalar una última vez porque la antigua firma de prueba no se guardó. Las versiones 0.3 y posteriores se actualizan con el mismo identificador y firma.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
