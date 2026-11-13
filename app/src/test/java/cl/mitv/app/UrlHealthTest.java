@@ -14,7 +14,7 @@ public class UrlHealthTest {
  }
  @Test public void getUnsupportedFallsBackToHeadAndFollowsRedirects() throws Exception {
   try(MockWebServer server=new MockWebServer()) {
-   server.enqueue(new MockResponse().setResponseCode(405)); server.enqueue(new MockResponse().setResponseCode(206).setBody("x"));
+   server.enqueue(new MockResponse().setResponseCode(405)); server.enqueue(new MockResponse().setResponseCode(206));
    assertEquals(206,UrlHealthWorker.probe(server.url("/live").toString()).code);
    RecordedRequest get=server.takeRequest(); assertEquals("GET",get.getMethod()); assertEquals("bytes=0-127",get.getHeader("Range")); assertEquals("HEAD",server.takeRequest().getMethod());
    server.enqueue(new MockResponse().setResponseCode(302).setHeader("Location","/next")); server.enqueue(new MockResponse().setResponseCode(200));
