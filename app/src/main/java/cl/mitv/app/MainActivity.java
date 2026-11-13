@@ -84,6 +84,29 @@ public final class MainActivity extends Activity {
     private final LinkedHashSet<String> selectedIds=new LinkedHashSet<>();
     private Button deleteSelectedButton;
     private boolean playerSuspended;
+    private final android.os.Handler controlsHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable hideControlsTask = () -> {
+        if(currentChannel != null && customView == null && hasWindowFocus()
+                && playerLayout != null && playerLayout.getChildAt(0).getVisibility() == View.VISIBLE) toggleFullscreen();
+    };
+    private boolean isTelevision() {
+        int mode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_TYPE_MASK;
+        return mode == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+            || !getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN);
+    }
+    private void scheduleHideControls() {
+        controlsHandler.removeCallbacks(hideControlsTask);
+        if(isTelevision() && currentChannel != null && customView == null && playerLayout != null
+                && playerLayout.getChildAt(0).getVisibility() == View.VISIBLE)
+            controlsHandler.postDelayed(hideControlsTask,6000);
+    }
+    @Override public void onUserInteraction() {
+        super.onUserInteraction(); scheduleHideControls();
+    }
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if(focused) scheduleHideControls(); else controlsHandler.removeCallbacks(hideControlsTask);
+    }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -382,6 +405,7 @@ public final class MainActivity extends Activity {
                 }
             });
             nativePlayer.setMediaItem(MediaItem.fromUri(channel.playerUrl)); nativePlayer.prepare(); nativePlayer.play(); video.requestFocus();
+            scheduleHideControls();
             return;
         }
         web = new WebView(this); web.setBackgroundColor(Color.BLACK);
@@ -429,6 +453,7 @@ public final class MainActivity extends Activity {
             @Override public void onHideCustomView() { hideCustomView(); }
         });
         playerLayout.addView(web,new LinearLayout.LayoutParams(-1,0,1)); web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); web.requestFocus();
+        scheduleHideControls();
     }
     private String channelLabel(CatalogItem item) {
         int number=ChannelNavigation.number(channels,item);
@@ -456,7 +481,14 @@ public final class MainActivity extends Activity {
         if(web == null && nativePlayer == null) return;
         boolean visible = playerLayout.getChildAt(0).getVisibility() == View.VISIBLE;
         playerLayout.getChildAt(0).setVisibility(visible ? View.GONE : View.VISIBLE);
-        status.setVisibility(visible ? View.GONE : View.VISIBLE); setFullscreenUi(visible); if(web!=null) web.requestFocus();
+        status.setVisibility(visible ? View.GONE : View.VISIBLE); setFullscreenUi(visible);
+        if(visible) {
+            View content=playerLayout.getChildAt(playerLayout.getChildCount()-1);
+            content.requestFocus();
+        } else {
+            ((HorizontalScrollView)playerLayout.getChildAt(0)).getChildAt(0).requestFocus();
+        }
+        scheduleHideControls();
     }
     private void setFullscreenUi(boolean enabled) {
         getWindow().getDecorView().setSystemUiVisibility(enabled ? View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
@@ -473,6 +505,7 @@ public final class MainActivity extends Activity {
         catch(ActivityNotFoundException e) { Toast.makeText(this,"No hay un navegador instalado.",Toast.LENGTH_LONG).show(); }
     }
     private void stopPlayer() {
+        controlsHandler.removeCallbacks(hideControlsTask);
         hideCustomView();
         if(nativePlayer!=null) { nativePlayer.release(); nativePlayer=null; }
         if(web != null) {
@@ -517,6 +550,7 @@ public final class MainActivity extends Activity {
         state.putString("focusAction",focusedAction); state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
     }
     @Override protected void onPause() {
+        controlsHandler.removeCallbacks(hideControlsTask);
         sleepHandler.removeCallbacks(sleepTask);
         if(nativePlayer!=null) { resumeNative=nativePlayer.isPlaying(); nativePlayer.pause(); }
         if(web != null) {
