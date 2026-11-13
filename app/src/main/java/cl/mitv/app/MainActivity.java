@@ -42,6 +42,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 
 /** Personal access to channels' official pages and their publicly linked web players. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(11,18,32), CARD = Color.rgb(23,35,53), MINT = Color.rgb(105,227,197);
     private static final String[] RESULTS = {"Pendiente", "Funciona", "No funciona"};

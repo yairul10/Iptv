@@ -1,6 +1,6 @@
 # Mi TV
 
-Versión 0.4.0 para celular Android y TV Box (Android 6 o superior). Catálogo inicial de 11 canales para probar en un TX1 con Android 10. Canal 9 fue confirmado por el usuario en su celular con la versión 0.1.0; los demás canales y el TV Box están pendientes de prueba física.
+Versión 0.5.0 para celular Android y TV Box (Android 6 o superior). Catálogo inicial de 11 canales para probar en un TX1 con Android 10. Canal 9 fue confirmado por el usuario en su celular con la versión 0.1.0; los demás canales y el TV Box están pendientes de prueba física.
 
 ## Descargar e instalar
 
@@ -78,7 +78,7 @@ La app usa internet y los permisos estándar de WorkManager para los trabajos pr
 
 ## Catálogo local con Room (0.4.0)
 
-Room es la fuente de datos de ambas pantallas: canales y películas. La UI observa una consulta de la base que une entradas, grupos y resolvers. Favoritos, resultados manuales y salud de URLs también se guardan en Room. La base `mitv-catalog.db` tiene estas tablas:
+Room es la fuente de datos de ambas pantallas: canales y películas. La UI observa una consulta de la base que une entradas, grupos y resolvers. Favoritos, resultados manuales y salud de URLs también se guardan en Room. La base `mitv-catalog.db` tiene estas tablas (más `diagnostic_events` desde 0.5.0):
 
 | Tabla | Contenido |
 | --- | --- |
@@ -149,3 +149,26 @@ Una página accesible no prueba que el video funcione. El marcado no elimina ent
 ## Pruebas de la migración
 
 Se incluyen pruebas de Room con SQLite bajo Robolectric para siembra única, reapertura, migración de preferencias, cancelación de importación, protección de ediciones/eliminaciones, versiones remotas y CRUD de películas. También se prueban la importación/exportación M3U/JSON, validación y las comprobaciones HEAD/GET con un servidor local de pruebas. GitHub ejecuta estas pruebas y Android Lint antes de publicar un APK.
+
+## Diagnóstico y ajustes (0.5.0)
+
+**Diagnóstico** muestra los últimos 200 eventos locales, del más reciente al más antiguo, con fecha, nivel y categoría. **Copiar diagnóstico** copia esa vista al portapapeles únicamente al pulsarlo. Se registran inicio, preparación de la base, fallos de operaciones, sincronización, importaciones/exportaciones, carga de reproductores, comprobaciones de salud, actualizaciones y temporizador. Los paths, parámetros y credenciales de URLs se ocultan; se conserva el host para identificar el servicio. También se ocultan posibles cabeceras de autenticación y valores de PIN/tokens. No se envía el diagnóstico a un servidor.
+
+Room pasa de esquema 1 a 2 mediante `MIGRATION_1_2`: solo añade `diagnostic_events`, conservando canales, películas, grupos, resolvers, favoritos, resultados y metadatos. La inserción de eventos y el recorte a 200 son transaccionales y se ejecutan fuera del hilo de la UI.
+
+En **Ajustes** se pueden guardar:
+
+| Ajuste | Comportamiento |
+| --- | --- |
+| User-Agent | Vacío mantiene el predeterminado de WebView; en peticiones directas usa MiTV. Se aplica al reproductor, descargas de catálogo y comprobaciones de URLs. |
+| Referer por dominio | Formato `dominio=https://página/`, una línea por dominio. Abarca subdominios y prima la coincidencia más específica. Se recalcula por URL solicitada, incluyendo segmentos del reproductor nativo y comprobaciones de salud. En WebView se añade a la navegación principal; los subrecursos siguen las reglas del navegador/proveedor. |
+| Calidad | Automática o altura máxima 480p/720p/1080p en video directo. Solo se pueden seleccionar calidades que la fuente realmente ofrezca. Los reproductores web gestionan su propia calidad. |
+| Buffer | Bajo (2–10 s), normal (15–30 s) o alto (30–60 s), con umbrales de inicio y rebuffer compatibles. Se aplica al abrir el siguiente video directo. No controla el buffer interno de páginas web. |
+| PIN | Opcional, de 4 a 8 dígitos; protege abrir administración y ajustes. No bloquea canales ni películas. Se guarda únicamente un hash PBKDF2 con sal aleatoria. Cinco intentos fallidos producen un bloqueo temporal de un minuto. Para cambiarlo o quitarlo hay que acceder primero con el PIN actual. |
+| Temporizador | Desactivar o iniciar 15/30/60/90/120 minutos al guardar. Al expirar detiene el reproductor de Mi TV y vuelve a canales/películas. El plazo se conserva si se sale y vuelve a la app; una reproducción pausada no se reanuda si el tiempo ya expiró. No controla otros navegadores o apps. |
+
+Los ajustes se guardan localmente, fuera de los catálogos importables/exportables. Guardar otros ajustes no reinicia un temporizador activo a menos que se marque **Cambiar temporizador al guardar**.
+
+La comprobación de versión usa el JSON remoto de la última Release del repositorio. Hay un botón manual y una comprobación silenciosa al abrir, como máximo una vez al día después de un resultado válido. Una versión compatible superior muestra el aviso con enlace de descarga; el aviso automático se presenta una vez por versión. Se siguen validando versión, paquete, certificado y origen del APK; Android confirma la instalación. Un fallo automático queda en diagnóstico sin interrumpir al usuario.
+
+La tabla `movies` ya utiliza el mismo patrón `groupId`/`resolverId` de canales. **Gestionar películas** abre directamente su pantalla de CRUD, manteniendo importación, exportación, reproducción, estado de salud y protección frente a sincronización remota.

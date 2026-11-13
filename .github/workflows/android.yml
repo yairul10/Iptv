@@ -56,7 +56,6 @@ jobs:
       - name: Verificar esquema Room versionado
         run: |
           if [ -n "$(git status --porcelain -- app/schemas)" ]; then
-            python3 -c "import pathlib,base64; p=pathlib.Path('app/schemas/cl.mitv.app.data.AppDatabase/2.json'); print('ROOM_SCHEMA_BASE64='+base64.b64encode(p.read_bytes()).decode())"
             echo '::error::El esquema Room generado cambió. Guarda el esquema y agrega la migración correspondiente antes de publicar.'
             exit 1
           fi
@@ -73,7 +72,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v0.5.0-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.5.0 (${GITHUB_RUN_NUMBER})" --notes 'Room, importación M3U/JSON con vista previa, edición de canales y películas, exportación, sincronización por versión con protección local y salud de URLs con WorkManager. La migración desde 0.1/0.2 requiere reinstalar una última vez; desde la firma fija se conserva el mismo identificador y certificado.' --latest
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Mi TV 0.5.0 (${GITHUB_RUN_NUMBER})" --notes 'Diagnóstico local de 200 eventos, ajustes de User-Agent/Referer, calidad y buffer de video directo, PIN de administración, temporizador y avisos de versión. Se conserva la gestión de películas y el catálogo Room. Desde la firma fija se actualiza conservando datos; las versiones iniciales 0.1/0.2 requieren reinstalar una última vez.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
