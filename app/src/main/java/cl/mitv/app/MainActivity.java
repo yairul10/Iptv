@@ -66,6 +66,12 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private WebView web;
     private LinearLayout playerLayout;
+    private FrameLayout videoHost, browserChrome;
+    private LinearLayout browserHeader, browserGroups, browserChannels;
+    private ScrollView groupScroll, channelScroll;
+    private View videoTarget;
+    private boolean browserVisible=true;
+    private TextView browserNow;
     private View customView;
     private WebChromeClient.CustomViewCallback customCallback;
     private TextView status;
@@ -111,30 +117,6 @@ public final class MainActivity extends Activity {
     private final LinkedHashSet<String> selectedIds=new LinkedHashSet<>();
     private Button deleteSelectedButton;
     private boolean playerSuspended;
-    private final android.os.Handler controlsHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    private final Runnable hideControlsTask = () -> {
-        if(currentChannel != null && customView == null && hasWindowFocus()
-                && playerLayout != null && playerLayout.getChildAt(0).getVisibility() == View.VISIBLE) toggleFullscreen();
-    };
-    private boolean isTelevision() {
-        int mode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_TYPE_MASK;
-        return mode == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-            || !getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN);
-    }
-    private void scheduleHideControls() {
-        controlsHandler.removeCallbacks(hideControlsTask);
-        if(isTelevision() && currentChannel != null && customView == null && playerLayout != null
-                && playerLayout.getChildAt(0).getVisibility() == View.VISIBLE)
-            controlsHandler.postDelayed(hideControlsTask,6000);
-    }
-    @Override public void onUserInteraction() {
-        super.onUserInteraction(); scheduleHideControls();
-    }
-    @Override public void onWindowFocusChanged(boolean focused) {
-        super.onWindowFocusChanged(focused);
-        if(focused) scheduleHideControls(); else controlsHandler.removeCallbacks(hideControlsTask);
-    }
-
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         repository = CatalogRepository.get(this);
@@ -160,7 +142,10 @@ public final class MainActivity extends Activity {
             if(isFinishing() || isDestroyed()) return;
             trackChannels(rows);
             channels.clear(); if(rows != null) channels.addAll(rows);
-            if(ready && web == null && nativePlayer == null) {
+            if(currentChannel!=null) for(CatalogItem item:channels) if(item.id.equals(currentChannel.id)) { currentChannel=item; break; }
+            if(ready && !selecting && browserChrome!=null) {
+                renderBrowserLists();
+            } else if(ready && web == null && nativePlayer == null) {
                 if(homeScroll != null) homeScrollY = homeScroll.getScrollY();
                 showHome();
             }
@@ -208,10 +193,139 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,dp(6),0,dp(6)); parent.addView(b,p);
     }
     private void showHome() {
+        if(selecting) { showLegacyHome(); return; }
+        ensureBrowser();
+        if(currentChannel==null && videoHost.getChildCount()==0) {
+            TextView prompt=text("Elige un canal para comenzar",18,Color.LTGRAY); prompt.setGravity(android.view.Gravity.CENTER);
+            videoHost.addView(prompt,new FrameLayout.LayoutParams(-1,-1));
+        }
+        renderBrowserLists(); setBrowserVisible(true);
+    }
+    private void ensureBrowser() {
+        if(videoHost!=null && videoHost.getParent()==root) return;
+        root.removeAllViews();
+        videoHost=new FrameLayout(this); videoHost.setBackgroundColor(Color.BLACK);
+        root.addView(videoHost,new FrameLayout.LayoutParams(-1,-1));
+        TextView prompt=text("Elige un canal para comenzar",18,Color.LTGRAY);
+        prompt.setGravity(android.view.Gravity.CENTER); videoHost.addView(prompt,new FrameLayout.LayoutParams(-1,-1));
+        browserChrome=new FrameLayout(this); root.addView(browserChrome,new FrameLayout.LayoutParams(-1,-1));
+        browserHeader=new LinearLayout(this); browserHeader.setPadding(dp(12),0,dp(8),0); browserHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        browserHeader.setBackgroundColor(Color.argb(235,11,18,32)); browserChrome.addView(browserHeader);
+        TextView brand=text("Popes TV",22,Color.WHITE); brand.setTypeface(null,Typeface.BOLD);
+        browserHeader.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        Button options=button("⚙",this::showHomeOptions); options.setContentDescription("Opciones y configuración"); options.setMinWidth(0); options.setMinimumWidth(0);
+        browserHeader.addView(options,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        groupScroll=new ScrollView(this); browserGroups=column(); browserGroups.setPadding(dp(6),dp(6),dp(6),dp(6));
+        browserGroups.setBackgroundColor(Color.argb(230,11,18,32)); groupScroll.addView(browserGroups); browserChrome.addView(groupScroll);
+        channelScroll=new ScrollView(this); browserChannels=column(); browserChannels.setPadding(dp(8),dp(6),dp(8),dp(6));
+        browserChannels.setBackgroundColor(Color.argb(230,11,18,32)); channelScroll.addView(browserChannels); browserChrome.addView(channelScroll);
+        root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob) -> layoutBrowser());
+        root.post(this::layoutBrowser);
+    }
+    private void place(View view,int width,int height,int left,int top) {
+        FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(width,height); params.leftMargin=left; params.topMargin=top; view.setLayoutParams(params);
+    }
+    private void layoutBrowser() {
+        if(videoHost==null || browserChrome==null || videoHost.getParent()!=root) return;
+        int width=root.getWidth(),height=root.getHeight(); if(width==0||height==0) return;
+        if(!browserVisible) { place(videoHost,width,height,0,0); return; }
+        int header=Math.min(dp(56),height/5); place(browserHeader,width,header,0,0);
+        if(width>height) {
+            int left=Math.min(dp(210),width*22/100),right=Math.min(dp(320),width*30/100);
+            place(groupScroll,left,height-header,0,header); place(channelScroll,right,height-header,width-right,header);
+            place(videoHost,width-left-right,height-header,left,header);
+        } else {
+            int preview=Math.min(width*9/16,(height-header)*45/100),left=width*34/100;
+            place(videoHost,width,preview,0,header);
+            place(groupScroll,left,height-header-preview,0,header+preview);
+            place(channelScroll,width-left,height-header-preview,left,header+preview);
+        }
+    }
+    private void setBrowserVisible(boolean visible) {
+        browserVisible=visible;
+        if(browserChrome==null) return;
+        browserChrome.setVisibility(visible?View.VISIBLE:View.GONE);
+        if(status!=null) status.setVisibility(visible?View.VISIBLE:View.GONE);
+        setFullscreenUi(!visible); layoutBrowser();
+        if(videoTarget!=null) videoTarget.requestFocus();
+    }
+    private void toggleBrowser() { if(currentChannel!=null) setBrowserVisible(!browserVisible); }
+    private void browserFilter(int filter) {
+        favoritesOnly=filter==1; recentOnly=filter==2; pendingOnly=filter==3;
+        selectedCategory="Todos"; searchQuery=""; focusedChannelId=""; renderBrowserLists(); groupScroll.requestFocus();
+    }
+    private void renderBrowserLists() {
+        if(browserChrome==null) return;
+        browserGroups.removeAllViews(); browserChannels.removeAllViews();
+        addButton(browserGroups,button(!favoritesOnly&&!recentOnly&&!pendingOnly?"✓ Todos":"Todos",() -> browserFilter(0)));
+        addButton(browserGroups,button(favoritesOnly?"✓ Favoritos":"Favoritos",() -> browserFilter(1)));
+        addButton(browserGroups,button(recentOnly?"✓ Recién agregados":"Recién agregados",() -> browserFilter(2)));
+        addButton(browserGroups,button(pendingOnly?"✓ Sin revisar":"Sin revisar",() -> browserFilter(3)));
+        browserGroups.addView(text("GRUPOS",12,MINT));
+        LinkedHashSet<String> groups=new LinkedHashSet<>(); groups.add("Todos");
+        for(CatalogItem item:channels) if(!item.movie) groups.add(item.category);
+        for(String group:groups) addButton(browserGroups,button((selectedCategory.equals(group)?"✓ ":"")+group,() -> {
+            selectedCategory=group; renderBrowserLists(); channelScroll.requestFocus();
+        }));
+        browserNow=text(currentChannel==null?"Canales":currentChannel.name,16,MINT); browserNow.setMaxLines(2); browserChannels.addView(browserNow);
+        if(currentChannel!=null) addButton(browserChannels,button("Opciones del canal",this::showChannelOptions));
+        EditText search=new EditText(this); search.setSingleLine(true); search.setTextColor(Color.WHITE); search.setHintTextColor(Color.LTGRAY);
+        search.setHint("Buscar canal"); search.setContentDescription("Buscar canal por nombre"); search.setTextSize(15);
+        search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE); search.setText(searchQuery); browserChannels.addView(search);
+        LinearLayout list=column(); browserChannels.addView(list);
+        TextView empty=text("No hay canales en este filtro",15,Color.LTGRAY); browserChannels.addView(empty);
+        int count=0; View playing=null;
+        for(CatalogItem item:channels) {
+            if(item.movie || !matchesReviewFilter(item) || (favoritesOnly&&!item.favorite)
+                || (!"Todos".equals(selectedCategory)&&!selectedCategory.equals(item.category))) continue;
+            boolean active=currentChannel!=null&&currentChannel.id.equals(item.id);
+            Button entry=button((active?"▶ ":"")+channelLabel(item),() -> {
+                rememberHome(item);
+                if(currentChannel!=null&&currentChannel.id.equals(item.id)) setBrowserVisible(false);
+                else { showPlayer(item); setBrowserVisible(true); }
+            });
+            entry.setTextSize(15); entry.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
+            entry.setContentDescription((active?"Ampliar ":"Ver ")+item.name); entry.setTag(item);
+            if(active) { entry.setTextColor(MINT); playing=entry; }
+            entry.setOnLongClickListener(v -> { if(currentChannel!=null&&currentChannel.id.equals(item.id)) showChannelOptions(); else markResult(item,false); return true; });
+            addButton(list,entry); boolean matches=CatalogSearch.matches(item.name,searchQuery); entry.setVisibility(matches?View.VISIBLE:View.GONE); if(matches) count++;
+        }
+        empty.setVisibility(count==0?View.VISIBLE:View.GONE);
+        search.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence v,int start,int count,int after) { }
+            public void afterTextChanged(Editable v) { }
+            public void onTextChanged(CharSequence value,int start,int before,int count) {
+                searchQuery=value.toString(); int visible=0;
+                for(int i=0;i<list.getChildCount();i++) { View row=list.getChildAt(i); CatalogItem item=(CatalogItem)row.getTag();
+                    boolean matches=CatalogSearch.matches(item.name,searchQuery); row.setVisibility(matches?View.VISIBLE:View.GONE); if(matches) visible++; }
+                empty.setVisibility(visible==0?View.VISIBLE:View.GONE);
+            }
+        });
+        if(playing!=null) { final View target=playing; channelScroll.post(() -> { if(target.getParent()!=null) channelScroll.smoothScrollTo(0,Math.max(0,list.getTop()+target.getTop()-dp(120))); }); }
+    }
+    private void showChannelOptions() {
+        final CatalogItem item=currentChannel; if(item==null) return;
+        new AlertDialog.Builder(this).setTitle(item.name).setItems(new String[]{"Resultado de la prueba",item.favorite?"Quitar de favoritos":"Añadir a favoritos","Recargar","Interactuar con página web","Página oficial","Borrar canal"},(d,which) -> {
+            switch(which) {
+                case 0: markResult(item,true); break;
+                case 1: repository.submit(() -> { repository.store.favorite(item,!item.favorite); return null; },(v,e) -> { if(e!=null) Toast.makeText(this,"No se pudo guardar el favorito",Toast.LENGTH_SHORT).show(); }); break;
+                case 2: if(web!=null) web.reload(); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } break;
+                case 3: if(web!=null) { if(videoTarget!=null) videoTarget.setVisibility(View.GONE); web.requestFocus(); Toast.makeText(this,"Atrás recupera las listas",Toast.LENGTH_SHORT).show(); } break;
+                case 4: openBrowser(item.siteUrl); break;
+                case 5: confirmDeletePlaying(item); break;
+            }
+        }).setNegativeButton("Cerrar",null).show();
+    }
+    private void installVideoTarget() {
+        Button target=new Button(this); target.setText(""); target.setBackgroundColor(Color.TRANSPARENT); target.setFocusable(true);
+        target.setContentDescription("Ampliar video o mostrar lista de canales"); target.setOnClickListener(v -> toggleBrowser());
+        videoTarget=target; videoHost.addView(target,new FrameLayout.LayoutParams(-1,-1)); target.requestFocus();
+    }
+    private void showLegacyHome() {
         showMovies = false;
         boolean restoreSearchFocus=searchInput!=null && searchInput.hasFocus() && currentChannel==null;
         int searchCursor=restoreSearchFocus?searchInput.getSelectionStart():searchQuery.length();
-        stopPlayer(); root.removeAllViews();
+        stopPlayer(); root.removeAllViews(); videoHost=null; browserChrome=null;
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         homeScroll = new ScrollView(this); homeScroll.setFillViewport(true);
         LinearLayout page = column(); page.setPadding(dp(16),dp(20),dp(16),dp(20));
@@ -339,7 +453,7 @@ public final class MainActivity extends Activity {
     }
     private void showHelp() {
         new AlertDialog.Builder(this).setTitle("Popes TV")
-            .setMessage("Usa las flechas y OK del control, o toca la pantalla.\n\nVer en vivo abre el reproductor o la página oficial del canal. Algunos piden Play, activar sonido o aceptar cookies.\n\nEn las páginas oficiales usa sus propios controles. Ampliar vista oculta los botones de Popes TV; Atrás los recupera. MENU también alterna la vista.\n\nResultado guarda si cada canal funciona en este equipo. Las pruebas y favoritos del celular y el TV Box son independientes.\n\nLa lista se revisa por internet al abrir Popes TV. Actualizar canales permite revisarla de nuevo. Si no hay conexión, se conserva la última lista válida.\n\nBuscar actualización de la app descarga un APK compatible desde GitHub; Android confirma la instalación.\n\nSi un canal falla, pulsa Recargar o Página oficial. La app no está afiliada a los canales ni almacena o retransmite las señales.")
+            .setMessage("Elige un grupo a la izquierda y un canal a la derecha.\n\nToca el video o pulsa OK sobre él para ampliar. Otro toque, OK o Atrás recupera las listas sin detener el canal. En pantalla completa, las flechas laterales cambian de canal.\n\nLas opciones del canal permiten guardar Resultado, favoritos, recargar o borrar. Si una página requiere Play o aceptar cookies, usa Interactuar con página web; Atrás recupera las listas.\n\nEl botón de ajustes abre la administración, importación, configuración y actualizaciones.\n\nRecién agregados y Sin revisar conservan los pendientes hasta que marques Funciona o No funciona. La app no almacena ni retransmite las señales.")
             .setPositiveButton("Entendido",null).show();
     }
     private void refreshCatalog(boolean manual) {
@@ -391,7 +505,7 @@ public final class MainActivity extends Activity {
                     if(deleting) return;
                     deleting=true;
                     ArrayList<CatalogItem> before=new ArrayList<>(channels);
-                    boolean expanded=customView!=null || playerLayout.getChildAt(0).getVisibility()==View.GONE;
+                    boolean expanded=customView!=null || !browserVisible;
                     repository.submit(() -> {
                         repository.store.deleteMany(java.util.Collections.singletonList(channel.id),channel.movie);
                         return repository.store.dao.catalog();
@@ -403,8 +517,8 @@ public final class MainActivity extends Activity {
                             if(currentChannel==channel) {
                                 CatalogItem next=ChannelNavigation.afterDeletion(before,channel,reviewFiltered(remaining),selectedCategory,favoritesOnly,searchQuery);
                                 channels.clear(); channels.addAll(remaining);
-                                if(next!=null) { rememberHome(next); showPlayer(next); if(expanded) toggleFullscreen(); }
-                                else { homeScrollY=0; showHome(); }
+                                if(next!=null) { rememberHome(next); showPlayer(next); setBrowserVisible(!expanded); }
+                                else { stopPlayer(); videoHost.removeAllViews(); homeScrollY=0; showHome(); }
                             }
                         } else Toast.makeText(this,"No se pudo borrar. Inténtalo de nuevo.",Toast.LENGTH_LONG).show();
                     });
@@ -425,19 +539,13 @@ public final class MainActivity extends Activity {
     @SuppressWarnings("SetJavaScriptEnabled")
     private void showPlayer(CatalogItem channel) {
         Diagnostics.record(this,"INFO","reproducción",(channel.movie?"Película":"Canal")+" abierto en modo "+channel.mode+" · "+channel.playerUrl);
-        stopPlayer(); currentChannel = channel; playerSuspended = false; root.removeAllViews();
+        stopPlayer(); currentChannel = channel; playerSuspended = false; ensureBrowser(); videoHost.removeAllViews();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        playerLayout = column(); root.addView(playerLayout,new FrameLayout.LayoutParams(-1,-1));
+        playerLayout = column(); videoHost.addView(playerLayout,new FrameLayout.LayoutParams(-1,-1));
         HorizontalScrollView controlsScroll = new HorizontalScrollView(this);
         LinearLayout controls = new LinearLayout(this); controls.setPadding(dp(8),dp(4),dp(8),dp(4));
         controlsScroll.addView(controls); playerLayout.addView(controlsScroll);
-        addControl(controls,button("Canales",this::showHome));
-        addControl(controls,button(channel.movie?"Borrar película":"Borrar canal",() -> confirmDeletePlaying(channel)));
-        addControl(controls,button("Play / pausa",this::togglePlayback));
-        addControl(controls,button("Ampliar vista",this::toggleFullscreen));
-        addControl(controls,button("Recargar",() -> { if(web != null) web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); else if(nativePlayer!=null) { nativePlayer.prepare(); nativePlayer.play(); } }));
-        addControl(controls,button("Resultado",() -> markResult(channel,true)));
-        addControl(controls,button("Página oficial",() -> openBrowser(channel.siteUrl)));
+        controlsScroll.setVisibility(View.GONE);
         final TextView playerStatus = text("Cargando " + channelLabel(channel) + "…",13,Color.LTGRAY);
         status = playerStatus; status.setPadding(dp(12),0,dp(12),dp(4)); playerLayout.addView(status);
         final ProgressBar playerProgress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
@@ -453,13 +561,7 @@ public final class MainActivity extends Activity {
             if(profile.qualityHeight>0) nativePlayer.setTrackSelectionParameters(nativePlayer.getTrackSelectionParameters().buildUpon().setMaxVideoSize(Integer.MAX_VALUE,profile.qualityHeight).build());
             nativePlayer.setAudioAttributes(new androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(),true);
             PlayerView video=new PlayerView(this);
-            video.setPlayer(channel.movie?nativePlayer:new ChannelPlayer(nativePlayer,() -> switchChannel(-1),() -> switchChannel(1)));
-            if(!channel.movie) {
-                video.setShowPreviousButton(true); video.setShowNextButton(true);
-                View previous=video.findViewById(androidx.media3.ui.R.id.exo_prev),next=video.findViewById(androidx.media3.ui.R.id.exo_next);
-                if(previous!=null) previous.setContentDescription("Canal anterior");
-                if(next!=null) next.setContentDescription("Canal siguiente");
-            }
+            video.setPlayer(nativePlayer); video.setUseController(false);
             playerLayout.addView(video,new LinearLayout.LayoutParams(-1,0,1));
             nativePlayer.addListener(new androidx.media3.common.Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) {
@@ -472,12 +574,12 @@ public final class MainActivity extends Activity {
                 }
             });
             nativePlayer.setMediaItem(MediaItem.fromUri(channel.playerUrl)); nativePlayer.prepare(); nativePlayer.play(); video.requestFocus();
-            scheduleHideControls();
+            installVideoTarget(); renderBrowserLists(); setBrowserVisible(browserVisible);
             return;
         }
         web = new WebView(this); web.setBackgroundColor(Color.BLACK);
         WebSettings settings = web.getSettings(); if(!PlaybackSettings.current.userAgent.isEmpty()) settings.setUserAgentString(PlaybackSettings.current.userAgent); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(true); settings.setLoadWithOverviewMode(true); settings.setUseWideViewPort(true);
+        settings.setMediaPlaybackRequiresUserGesture(false); settings.setLoadWithOverviewMode(true); settings.setUseWideViewPort(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         // Official pages often use third-party video providers. Their cookie notices remain intact.
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
@@ -503,9 +605,10 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageFinished(WebView view,String page) {
-                if(!failed) playerStatus.setText(channelLabel(channel) + (channel.directPlayer
-                    ? " · Pulsa Play o el botón OK. Atrás para volver."
-                    : " · Usa Play y los controles de la página oficial."));
+                if(!failed) {
+                    playerStatus.setText(channelLabel(channel)+" · OK o toca el video para ampliar");
+                    if(channel.directPlayer) view.evaluateJavascript("(function(){var v=document.querySelector('video');if(v){v.play().catch(function(){});}})()",null);
+                }
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error) { if(request.isForMainFrame()) fail(); }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) { if(request.isForMainFrame()) fail(); }
@@ -515,12 +618,13 @@ public final class MainActivity extends Activity {
             @Override public void onShowCustomView(View view,CustomViewCallback callback) {
                 if(customView != null) { callback.onCustomViewHidden(); return; }
                 customView = view; customCallback = callback;
-                playerLayout.setVisibility(View.GONE); root.addView(view,new FrameLayout.LayoutParams(-1,-1)); setFullscreenUi(true);
+                playerLayout.setVisibility(View.GONE); videoHost.addView(view,new FrameLayout.LayoutParams(-1,-1));
+                if(videoTarget!=null) videoTarget.bringToFront(); setBrowserVisible(false);
             }
             @Override public void onHideCustomView() { hideCustomView(); }
         });
         playerLayout.addView(web,new LinearLayout.LayoutParams(-1,0,1)); web.loadUrl(channel.playerUrl,PlaybackSettings.current.headers(channel.playerUrl)); web.requestFocus();
-        scheduleHideControls();
+        installVideoTarget(); renderBrowserLists(); setBrowserVisible(browserVisible);
     }
     private String channelLabel(CatalogItem item) {
         int number=ChannelNavigation.number(channels,item);
@@ -530,49 +634,29 @@ public final class MainActivity extends Activity {
         CatalogItem next=ChannelNavigation.adjacent(reviewFiltered(channels),currentChannel,direction,selectedCategory,favoritesOnly,searchQuery);
         if(next==null) { Toast.makeText(this,"No hay otros canales en este filtro.",Toast.LENGTH_SHORT).show(); return; }
         if(next.id.equals(currentChannel.id)) { Toast.makeText(this,"Solo hay un canal en este filtro.",Toast.LENGTH_SHORT).show(); return; }
-        boolean expanded=customView!=null || playerLayout.getChildAt(0).getVisibility()==View.GONE;
+        boolean expanded=customView!=null || !browserVisible;
         rememberHome(next); showPlayer(next);
-        if(expanded) toggleFullscreen();
-        if(nativePlayer!=null) { View focus=root.findViewById(direction<0?androidx.media3.ui.R.id.exo_prev:androidx.media3.ui.R.id.exo_next); if(focus!=null) focus.requestFocus(); }
+        setBrowserVisible(!expanded);
     }
     private void addControl(LinearLayout row,Button b) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2,-2); p.setMargins(dp(3),0,dp(3),0); row.addView(b,p);
     }
-    private void togglePlayback() {
-        if(nativePlayer!=null) { if(nativePlayer.isPlaying()) nativePlayer.pause(); else nativePlayer.play(); return; }
-        if(web == null) return;
-        web.evaluateJavascript("(function(){var v=document.querySelector('video');if(!v)return false;if(v.paused){v.muted=false;v.play().catch(function(){});}else{v.pause();}return true;})()",
-            result -> { if("false".equals(result)) Toast.makeText(this,"Usa Play en el reproductor de la página oficial.",Toast.LENGTH_LONG).show(); });
-    }
-    private void toggleFullscreen() {
-        if(web == null && nativePlayer == null) return;
-        boolean visible = playerLayout.getChildAt(0).getVisibility() == View.VISIBLE;
-        playerLayout.getChildAt(0).setVisibility(visible ? View.GONE : View.VISIBLE);
-        status.setVisibility(visible ? View.GONE : View.VISIBLE); setFullscreenUi(visible);
-        if(visible) {
-            View content=playerLayout.getChildAt(playerLayout.getChildCount()-1);
-            content.requestFocus();
-        } else {
-            ((HorizontalScrollView)playerLayout.getChildAt(0)).getChildAt(0).requestFocus();
-        }
-        scheduleHideControls();
-    }
+    private void toggleFullscreen() { toggleBrowser(); }
     private void setFullscreenUi(boolean enabled) {
         getWindow().getDecorView().setSystemUiVisibility(enabled ? View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
     }
     private void hideCustomView() {
         if(customView == null) return;
-        root.removeView(customView); customView = null;
+        videoHost.removeView(customView); customView = null;
         if(playerLayout != null) playerLayout.setVisibility(View.VISIBLE);
         WebChromeClient.CustomViewCallback cb = customCallback; customCallback = null;
-        if(cb != null) cb.onCustomViewHidden(); setFullscreenUi(false);
+        if(cb != null) cb.onCustomViewHidden(); setFullscreenUi(!browserVisible);
     }
     private void openBrowser(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }
         catch(ActivityNotFoundException e) { Toast.makeText(this,"No hay un navegador instalado.",Toast.LENGTH_LONG).show(); }
     }
     private void stopPlayer() {
-        controlsHandler.removeCallbacks(hideControlsTask);
         hideCustomView();
         if(nativePlayer!=null) { nativePlayer.release(); nativePlayer=null; }
         if(web != null) {
@@ -580,30 +664,33 @@ public final class MainActivity extends Activity {
             if(web.getParent() instanceof ViewGroup) ((ViewGroup)web.getParent()).removeView(web);
             web.destroy(); web = null;
         }
-        playerSuspended = false; resumeNative=false; currentChannel = null; setFullscreenUi(false);
+        videoTarget=null; playerSuspended = false; resumeNative=false; currentChannel = null; setFullscreenUi(false);
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if(currentChannel!=null && !currentChannel.movie && (event.getKeyCode()==KeyEvent.KEYCODE_CHANNEL_UP || event.getKeyCode()==KeyEvent.KEYCODE_CHANNEL_DOWN)) {
             if(event.getAction()==KeyEvent.ACTION_DOWN && event.getRepeatCount()==0) switchChannel(event.getKeyCode()==KeyEvent.KEYCODE_CHANNEL_UP?1:-1);
             return true;
         }
-        // Do not swallow OK on entire websites: it must still activate their own links and buttons.
-        if(web != null && currentChannel != null && currentChannel.directPlayer && web.hasFocus()
-                && (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER || event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
-            if(event.getAction() == KeyEvent.ACTION_UP) togglePlayback(); return true;
+        if(currentChannel!=null && !browserVisible && (event.getKeyCode()==KeyEvent.KEYCODE_DPAD_CENTER || event.getKeyCode()==KeyEvent.KEYCODE_ENTER)) {
+            if(event.getAction()==KeyEvent.ACTION_UP) { hideCustomView(); if(videoTarget!=null) videoTarget.setVisibility(View.VISIBLE); setBrowserVisible(true); } return true;
+        }
+        if(currentChannel!=null && !browserVisible && (event.getKeyCode()==KeyEvent.KEYCODE_DPAD_LEFT || event.getKeyCode()==KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            if(event.getAction()==KeyEvent.ACTION_DOWN && event.getRepeatCount()==0) switchChannel(event.getKeyCode()==KeyEvent.KEYCODE_DPAD_LEFT?-1:1);
+            return true;
         }
         return super.dispatchKeyEvent(event);
     }
     @Override public boolean onKeyDown(int key,KeyEvent event) {
-        if((web != null || nativePlayer != null) && key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { togglePlayback(); return true; }
+        if(currentChannel!=null && key==KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { toggleBrowser(); return true; }
         if((web != null || nativePlayer != null) && key == KeyEvent.KEYCODE_MENU) { toggleFullscreen(); return true; }
         return super.onKeyDown(key,event);
     }
     @Override public void onBackPressed() {
         if(selecting && currentChannel==null) { if(!deleting) { selecting=false; selectedIds.clear(); showHome(); } return; }
-        if(customView != null) { hideCustomView(); return; }
-        if((web != null || nativePlayer != null) && playerLayout.getChildAt(0).getVisibility() == View.GONE) { toggleFullscreen(); return; }
-        if(web != null || nativePlayer != null) { showHome(); return; }
+        if(customView != null) { hideCustomView(); setBrowserVisible(true); return; }
+        if(videoTarget!=null && videoTarget.getVisibility()!=View.VISIBLE) { videoTarget.setVisibility(View.VISIBLE); setBrowserVisible(true); return; }
+        if(currentChannel!=null && !browserVisible) { setBrowserVisible(true); return; }
+        if(currentChannel!=null) { stopPlayer(); videoHost.removeAllViews(); showHome(); return; }
         if(favoritesOnly || recentOnly || pendingOnly || !selectedCategory.equals("Todos")) {
             favoritesOnly = false; recentOnly=false; pendingOnly=false; selectedCategory = "Todos"; homeScrollY = 0; showHome(); return;
         }
@@ -618,7 +705,6 @@ public final class MainActivity extends Activity {
         state.putString("focusAction",focusedAction); state.putString("focus",focusedChannelId); state.putInt("scroll",web == null && homeScroll != null ? homeScroll.getScrollY() : homeScrollY);
     }
     @Override protected void onPause() {
-        controlsHandler.removeCallbacks(hideControlsTask);
         sleepHandler.removeCallbacks(sleepTask);
         if(nativePlayer!=null) { resumeNative=nativePlayer.isPlaying(); nativePlayer.pause(); }
         if(web != null) {
