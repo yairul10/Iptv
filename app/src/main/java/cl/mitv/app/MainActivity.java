@@ -247,7 +247,9 @@ public final class MainActivity extends Activity {
         browserChrome.setVisibility(visible?View.VISIBLE:View.GONE);
         if(status!=null) status.setVisibility(visible?View.VISIBLE:View.GONE);
         setFullscreenUi(!visible); layoutBrowser();
-        if(videoTarget!=null) videoTarget.requestFocus();
+        if(videoTarget!=null) {
+            videoTarget.requestFocus(); videoTarget.setBackground(background(Color.TRANSPARENT,visible?MINT:Color.TRANSPARENT));
+        }
     }
     private void toggleBrowser() { if(currentChannel!=null) setBrowserVisible(!browserVisible); }
     private void browserFilter(int filter) {
@@ -319,6 +321,7 @@ public final class MainActivity extends Activity {
     private void installVideoTarget() {
         Button target=new Button(this); target.setText(""); target.setBackgroundColor(Color.TRANSPARENT); target.setFocusable(true);
         target.setContentDescription("Ampliar video o mostrar lista de canales"); target.setOnClickListener(v -> toggleBrowser());
+        target.setOnFocusChangeListener((v,focused) -> target.setBackground(background(Color.TRANSPARENT,focused&&browserVisible?MINT:Color.TRANSPARENT)));
         videoTarget=target; videoHost.addView(target,new FrameLayout.LayoutParams(-1,-1)); target.requestFocus();
     }
     private void showLegacyHome() {
