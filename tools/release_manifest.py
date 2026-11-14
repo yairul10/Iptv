@@ -2,9 +2,12 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
-version = '0.6.6'
+match = re.search(r"versionName\s+['\"]([0-9]+\.[0-9]+\.[0-9]+)['\"]", Path('app/build.gradle').read_text())
+assert match, 'Missing app version'
+version = match.group(1)
 number = int(os.environ['GITHUB_RUN_NUMBER'])
 tag = f'v{version}-build.{number}'
 url = f'https://github.com/yairul10/Iptv/releases/download/{tag}/Mi-TV.apk'
