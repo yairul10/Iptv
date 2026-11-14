@@ -496,9 +496,9 @@ public final class MainActivity extends Activity {
             }).show();
     }
     private void confirmDeletePlaying(CatalogItem channel) {
-        if(deleting || currentChannel!=channel) return;
+        if(deleting || currentChannel==null || !currentChannel.id.equals(channel.id)) return;
         PinGate.require(this,() -> {
-            if(isFinishing() || isDestroyed() || currentChannel!=channel) return;
+            if(isFinishing() || isDestroyed() || currentChannel==null || !currentChannel.id.equals(channel.id)) return;
             new AlertDialog.Builder(this).setTitle(channel.movie?"Borrar película":"Borrar canal")
                 .setMessage("¿Quieres quitar \""+channel.name+"\" de tu lista? La sincronización no volverá a añadirlo.")
                 .setNegativeButton("Cancelar",null).setPositiveButton("Borrar",(dialog,which) -> {
@@ -514,7 +514,7 @@ public final class MainActivity extends Activity {
                         deleting=false;
                         if(error==null) {
                             Toast.makeText(this,channel.movie?"Película eliminada.":"Canal eliminado.",Toast.LENGTH_SHORT).show();
-                            if(currentChannel==channel) {
+                            if(currentChannel!=null && currentChannel.id.equals(channel.id)) {
                                 CatalogItem next=ChannelNavigation.afterDeletion(before,channel,reviewFiltered(remaining),selectedCategory,favoritesOnly,searchQuery);
                                 channels.clear(); channels.addAll(remaining);
                                 if(next!=null) { rememberHome(next); showPlayer(next); setBrowserVisible(!expanded); }
