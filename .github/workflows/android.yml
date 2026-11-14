@@ -6,6 +6,7 @@ on:
       - app/src/main/assets/channels.json
       - README.md
       - remote/catalog.json
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,7 +26,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Validar catálogo, navegación y actualizaciones
-        run: python3 tools/validate_catalog.py
+        run: |
+          python3 tools/validate_catalog.py
+          python3 tools/test_release_manifest.py
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
@@ -67,12 +70,13 @@ jobs:
           path: entrega/
           retention-days: 30
       - name: Publicar actualización descargable
-        if: env.KEYSTORE_AVAILABLE == 'true'
+        if: env.KEYSTORE_AVAILABLE == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.7.1-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Popes TV 0.7.1 (${GITHUB_RUN_NUMBER})" --notes 'La app se abre y permanece en horizontal en el celular. Permite girar a cualquiera de los dos lados horizontales y conserva el diseño de TV.' --latest
+          version="$(python3 -c 'import json; print(json.load(open("entrega/update.json"))["versionName"])')"
+          tag="v${version}-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" entrega/Mi-TV.apk entrega/update.json entrega/SHA256.txt --target "$GITHUB_SHA" --title "Popes TV ${version} (${GITHUB_RUN_NUMBER})" --notes 'Descarga e instala actualizaciones desde GitHub dentro de la app, con progreso, comprobación del APK y permiso de Android. Conserva los datos y permite continuar una descarga al volver.' --latest
       - name: Guardar informes de revisión
         if: always()
         uses: actions/upload-artifact@v4
