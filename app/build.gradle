@@ -9,7 +9,7 @@ android {
         targetSdk 35
         javaCompileOptions { annotationProcessorOptions { arguments += ["room.schemaLocation": "$projectDir/schemas".toString()] } }
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
-        versionName '0.7.0'
+        versionName '0.7.1'
     }
     sourceSets { test.resources.srcDir("$projectDir/schemas") }
     testOptions { unitTests.includeAndroidResources = true }
