@@ -20,6 +20,10 @@ final class AppUpdates {
 
     void check(Activity activity,ExecutorService executor) { check(activity,executor,true); }
     void check(Activity activity, ExecutorService executor,boolean manual) {
+        if(UpdateDownloadActivity.pending(activity)) {
+            if(manual) UpdateDownloadActivity.open(activity,null);
+            return;
+        }
         android.content.SharedPreferences preferences=SettingsStore.prefs(activity);
         if(!manual && System.currentTimeMillis()-preferences.getLong("update_checked",0)<24*60*60*1000L) return;
         if(checking) return;
@@ -49,6 +53,7 @@ final class AppUpdates {
                 if(!UpdatePolicy.compatible(installed,offered,current.packageName,update.getString("packageName"),
                     digest.toString(),update.getString("certificateSha256"),url) && offered > installed)
                     throw new IllegalStateException("Incompatible update");
+                if(offered>installed) new UpdatePackage(update.toString()).requireCompatible(current);
                 String version = update.getString("versionName");
                 if(version.length()>80) throw new IllegalArgumentException("Invalid version label");
                 preferences.edit().putLong("update_checked",System.currentTimeMillis()).apply();
@@ -62,10 +67,9 @@ final class AppUpdates {
                     if(!manual && (preferences.getLong("update_prompted",0)>=offered || !activity.getWindow().getDecorView().hasWindowFocus())) return;
                     preferences.edit().putLong("update_prompted",offered).apply();
                     new AlertDialog.Builder(activity).setTitle("Popes TV " + version + " disponible")
-                        .setMessage("Se descargará el APK desde GitHub. Ábrelo al terminar y elige Actualizar. Android te pedirá confirmar la instalación. Tus favoritos y resultados se conservan.")
-                        .setPositiveButton("Descargar",(d,w) -> {
-                            try { activity.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }
-                            catch(ActivityNotFoundException e) { Toast.makeText(activity,"Necesitas un navegador para descargar el APK.",Toast.LENGTH_LONG).show(); }
+                        .setMessage("La app descargará la actualización desde GitHub y abrirá el instalador de Android. Confirma Actualizar al terminar. No necesitas navegador ni pendrive; tus canales y ajustes se conservan.")
+                        .setPositiveButton("Actualizar",(d,w) -> {
+                            UpdateDownloadActivity.open(activity,update.toString());
                         }).setNegativeButton("Más tarde",null).show();
                 });
             } catch(Exception e) {
